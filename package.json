@@ -1,0 +1,20 @@
+{
+  "name": "draw-stuff",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "watch": "tsc -w"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "codemirror": "^6.0.1",
+    "obsidian": "^1.8.7"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.3"
+  }
+}
