@@ -30,10 +30,24 @@ class CanvasWidget extends WidgetType {
   canvas: HTMLCanvasElement | null = null;
 
   toDOM(view: EditorView) {
+    const filePath = 'testfile.png'
     this.canvas = document.createElement("canvas")
     const canvas = this.canvas
     const ctx = canvas.getContext("2d")
     if (!ctx) throw new Error("Could not get context");
+    
+    const imageFile = app?.vault.getFileByPath(filePath)
+    if (!imageFile) throw new Error("Could not find the canvas file")
+    app?.vault.readBinary(imageFile)
+      .then(buffer => {
+        const blob = new Blob([buffer], { type: 'image/png' });
+        const bitmap = createImageBitmap(blob)
+        return bitmap
+      })
+      .then(bitmap => {
+        ctx.drawImage(bitmap, 0, 0) 
+      });
+    
     const canvasRect = canvas.getBoundingClientRect();
     canvas.style.width = '100%'
     canvas.width = 700 // This is the width of the notes
@@ -56,7 +70,6 @@ class CanvasWidget extends WidgetType {
           blob.arrayBuffer().then(buffer => resolve(buffer))
         }, 'image/png');  
       })
-      const filePath = 'testfile.png'
       const files = app.vault.getFiles()
       let pngFile = null
       for (let file of files) if (filePath === file.path) {
