@@ -50,7 +50,7 @@ async function saveImage(canvas: HTMLCanvasElement, app: App, filePath: string) 
 function loadImageOnCanvas(canvas: HTMLCanvasElement, app: App, filePath: string) {
   const imageFile = app.vault.getFileByPath(filePath)
   if (!imageFile) {
-    console.error("Could not find the canvas file", filePath)
+    console.log("Could not find the canvas file", filePath)
     canvas.width = 700 // This is the width of the notes
     canvas.height = 700 / 1.41421356237 // This is the width of the notes
   } else {
@@ -87,10 +87,12 @@ function hydrateCanvas(canvas: HTMLCanvasElement) {
   let tool = "rectangle"
   let color = "white"
   let mousedownPosition: {x: number, y: number} | null = null
+  let lastImage = ctx.getImageData(0, 0, canvas.width, canvas.height)
   canvas.addEventListener('mousedown', ev => {
     isMouseDown = true
     ctx.fillStyle = color
     mousedownPosition = {x: ev.offsetX, y: ev.offsetY}
+    lastImage = ctx.getImageData(0, 0, canvas.width, canvas.height)
   })
   
   canvas.addEventListener('mousemove', ev => {
@@ -100,12 +102,20 @@ function hydrateCanvas(canvas: HTMLCanvasElement) {
           ctx.fillRect(ev.offsetX * scaleX, ev.offsetY * scaleY, 2, 2)
         }
       } break;
+      case "rectangle": {
+        if (!isMouseDown) return
+        if (!lastImage) {
+          console.log("lastImage not there")
+          return
+        }
+        ctx.putImageData(lastImage, 0, 0)
+        if (!mousedownPosition) {
+          console.log("No starting point to draw rect")
+          return
+        }
+        ctx.strokeRect(mousedownPosition.x, mousedownPosition.y, ev.offsetX - mousedownPosition.x, ev.offsetY - mousedownPosition.y)
+      } break;
     }
-    // const canvasRect = canvas.getBoundingClientRect();
-    // if (!drawing) return
-    // const scaleX = canvas.width / canvasRect.width
-    // const scaleY = canvas.height / canvasRect.height
-    // ctx.fillRect(ev.offsetX * scaleX, ev.offsetY * scaleY, 2, 2)
   })
 
   canvas.addEventListener('mouseup', async ev => {
@@ -116,6 +126,11 @@ function hydrateCanvas(canvas: HTMLCanvasElement) {
           console.log("No starting point to draw rect")
           return
         }
+        if (!lastImage) {
+          console.log("lastImage not there")
+          return
+        }
+        ctx.putImageData(lastImage, 0, 0)
         ctx.strokeRect(mousedownPosition.x, mousedownPosition.y, ev.offsetX - mousedownPosition.x, ev.offsetY - mousedownPosition.y)
       } break;
     }
@@ -159,14 +174,6 @@ class CanvasWidget extends WidgetType {
     if (!ctx) throw new Error("Could not get context");
     
     loadImageOnCanvas(canvas, this.app, filePath)
-  
-    
-    // canvas.style.width = '100%'
-    // canvas.style.border = '2px solid white'
-    // ctx.fillStyle = 'white';
-
-
-    
     const container = initCanvas(canvas)
 
     canvas.addEventListener('mouseup', async ev => {
@@ -180,11 +187,6 @@ class CanvasWidget extends WidgetType {
     return this.canvas?.height || 0
   }
 }
-
-
-
-
-
 
 
 export default class ExamplePlugin extends Plugin {
