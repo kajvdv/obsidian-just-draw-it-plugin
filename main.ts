@@ -21,6 +21,123 @@ import {RangeSetBuilder} from "@codemirror/state"
 
 
 
+const CANVAS_WIDTH = 700
+
+
+async function saveImage(canvas: HTMLCanvasElement, app: App, filePath: string) {
+  const buffer = await new Promise<ArrayBuffer>((resolve) => {
+    canvas.toBlob((blob) => {
+      if (blob === null) throw new Error("Blob was null")
+      blob.arrayBuffer().then(buffer => resolve(buffer))
+    }, 'image/png');  
+  })
+  const files = app.vault.getFiles()
+  let pngFile = null
+  for (let file of files) if (filePath === file.path) {
+    pngFile = file
+    break;
+  }
+  if (pngFile !== null) {
+    console.log("Saving image in exiting file %s", pngFile.name)
+    app.vault.modifyBinary(pngFile, buffer)
+  } else {
+    console.log("Creating new file to save image")
+    app.vault.createBinary(filePath, buffer)
+  }
+}
+
+
+function loadImageOnCanvas(canvas: HTMLCanvasElement, app: App, filePath: string) {
+  const imageFile = app.vault.getFileByPath(filePath)
+  if (!imageFile) {
+    console.error("Could not find the canvas file", filePath)
+    canvas.width = 700 // This is the width of the notes
+    canvas.height = 700 / 1.41421356237 // This is the width of the notes
+  } else {
+    app.vault.readBinary(imageFile)
+      .then(buffer => {
+        const blob = new Blob([buffer], { type: 'image/png' });
+        const bitmap = createImageBitmap(blob, {
+          resizeWidth: CANVAS_WIDTH,
+        })
+        return bitmap
+      })
+      .then(bitmap => {
+        const ctx = canvas.getContext("2d")
+        if (!ctx) throw new Error("Could not get 2d context");
+        
+        canvas.width = bitmap.width
+        canvas.height = bitmap.height
+        ctx.drawImage(bitmap, 0, 0) 
+      });
+  }
+}
+
+
+function hydrateCanvas(canvas: HTMLCanvasElement) {
+  const ctx = canvas.getContext("2d");
+  if (!ctx) throw new Error("Could not get 2d context");
+
+  const canvasRect = canvas.getBoundingClientRect();
+  const scaleX = canvas.width / canvasRect.width
+  const scaleY = canvas.height / canvasRect.height
+
+  let drawing = false;
+  let isMouseDown = false
+  let tool = "rectangle"
+  let color = "white"
+  let mousedownPosition: {x: number, y: number} | null = null
+  canvas.addEventListener('mousedown', ev => {
+    isMouseDown = true
+    ctx.fillStyle = color
+    mousedownPosition = {x: ev.offsetX, y: ev.offsetY}
+  })
+  
+  canvas.addEventListener('mousemove', ev => {
+    switch(tool) {
+      case "free": {
+        if (isMouseDown) {
+          ctx.fillRect(ev.offsetX * scaleX, ev.offsetY * scaleY, 2, 2)
+        }
+      } break;
+    }
+    // const canvasRect = canvas.getBoundingClientRect();
+    // if (!drawing) return
+    // const scaleX = canvas.width / canvasRect.width
+    // const scaleY = canvas.height / canvasRect.height
+    // ctx.fillRect(ev.offsetX * scaleX, ev.offsetY * scaleY, 2, 2)
+  })
+
+  canvas.addEventListener('mouseup', async ev => {
+    isMouseDown = false
+    switch (tool) {
+      case 'rectangle': {
+        if (!mousedownPosition) {
+          console.log("No starting point to draw rect")
+          return
+        }
+        ctx.strokeRect(mousedownPosition.x, mousedownPosition.y, ev.offsetX - mousedownPosition.x, ev.offsetY - mousedownPosition.y)
+      } break;
+    }
+    mousedownPosition = null
+  })
+}
+
+
+function initCanvas(canvas: HTMLCanvasElement) {
+  const container = document.createElement('div')
+  container.appendChild(canvas)
+  hydrateCanvas(canvas)
+  const toolbar = document.createElement('div')
+
+  toolbar.style.position = 'relative';
+  toolbar.style.width = "600px";
+  toolbar.style.height = "50px";
+  // toolbar.style.bottom = "-100px";
+  toolbar.style.backgroundColor = "white";
+  container.appendChild(toolbar)
+  return container
+}
 
 
 class CanvasWidget extends WidgetType {
@@ -41,66 +158,21 @@ class CanvasWidget extends WidgetType {
     const ctx = canvas.getContext("2d")
     if (!ctx) throw new Error("Could not get context");
     
-    const imageFile = this.app.vault.getFileByPath(filePath)
-    if (!imageFile) {
-      console.error("Could not find the canvas file", filePath)
-      canvas.width = 700 // This is the width of the notes
-      canvas.height = 700 / 1.41421356237 // This is the width of the notes
-    } else {
-      this.app.vault.readBinary(imageFile)
-        .then(buffer => {
-          const blob = new Blob([buffer], { type: 'image/png' });
-          const bitmap = createImageBitmap(blob)
-          return bitmap
-        })
-        .then(bitmap => {
-          canvas.width = bitmap.width
-          canvas.height = bitmap.height
-          ctx.drawImage(bitmap, 0, 0) 
-        });
-    }
+    loadImageOnCanvas(canvas, this.app, filePath)
+  
     
-    canvas.style.width = '100%'
-    canvas.style.border = '2px solid white'
-    ctx.fillStyle = 'white';
+    // canvas.style.width = '100%'
+    // canvas.style.border = '2px solid white'
+    // ctx.fillStyle = 'white';
 
 
     
-    let drawing = false;
-    canvas.addEventListener('mousedown', ev => {
-      drawing = true
-    })
-    
-    canvas.addEventListener('mousemove', ev => {
-      const canvasRect = canvas.getBoundingClientRect();
-      if (!drawing) return
-      const scaleX = canvas.width / canvasRect.width
-      const scaleY = canvas.height / canvasRect.height
-      ctx.fillRect(ev.offsetX * scaleX, ev.offsetY * scaleY, 2, 2)
-    })
+    const container = initCanvas(canvas)
 
     canvas.addEventListener('mouseup', async ev => {
-      drawing = false;
-      const buffer = await new Promise<ArrayBuffer>((resolve) => {
-        canvas.toBlob((blob) => {
-          if (blob === null) throw new Error("Blob was null")
-          blob.arrayBuffer().then(buffer => resolve(buffer))
-        }, 'image/png');  
-      })
-      const files = this.app.vault.getFiles()
-      let pngFile = null
-      for (let file of files) if (filePath === file.path) {
-        pngFile = file
-        console.log("found file", file.path)
-        break;
-      }
-      if (pngFile !== null) {
-        this.app.vault.modifyBinary(pngFile, buffer)
-      } else {
-        this.app.vault.createBinary(filePath, buffer)
-      }
+      saveImage(canvas, this.app, filePath)
     })
-    return canvas
+    return container
   }
 
 
@@ -116,27 +188,30 @@ class CanvasWidget extends WidgetType {
 
 
 export default class ExamplePlugin extends Plugin {
+  widgets: Map<string, CanvasWidget> = new Map();
+
+  getWidget = (filePath: string) => {
+    let widget = this.widgets.get(filePath)
+    if (!widget) {
+      widget = new CanvasWidget(filePath, this.app) 
+      this.widgets.set(filePath, widget)
+      return widget
+    } else {
+      return widget
+    }
+  }
+
   async onload() {
     const app = this.app
-    const widgets: Map<string, CanvasWidget> = new Map()
+    const widgets = this.widgets
+    const getWidget = this.getWidget
+
     const canvasField = StateField.define<DecorationSet>({
       create() {
         const set =  Decoration.none
         return set
       },
-      update(canvasDecs, tr) {
-        function getWidget(filePath: string) {
-          let widget = undefined
-          widget = widgets.get(filePath)
-          if (!widget) {
-            widget = new CanvasWidget(filePath, app) 
-            widgets.set(filePath, widget)
-            return widget
-          } else {
-            return widget
-          }
-        }
-        
+      update(canvasDecs, tr: Transaction) {
         const decos: Range<Decoration>[] = []
         syntaxTree(tr.state).iterate({
           enter(node) {
@@ -160,7 +235,6 @@ export default class ExamplePlugin extends Plugin {
     })
     
     this.registerEditorExtension(canvasField);
-
     
     this.registerMarkdownPostProcessor((element, context) => {
       // Replace all canvas tags with images
@@ -180,4 +254,5 @@ export default class ExamplePlugin extends Plugin {
         })
     });
   }
+
 }
