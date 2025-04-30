@@ -1,4 +1,5 @@
 import { syntaxTree } from '@codemirror/language';
+import { SyntaxNode } from '@lezer/common'
 import { Plugin, Editor, moment, App } from 'obsidian';
 import {
   StateField,
@@ -14,7 +15,7 @@ import {
   WidgetType,
 } from '@codemirror/view';
 import {Facet} from "@codemirror/state"
-import {Extension} from "@codemirror/state"
+import {Extension, RangeSet} from "@codemirror/state"
 import {DecorationSet} from "@codemirror/view"
 import {Decoration} from "@codemirror/view"
 import {RangeSetBuilder} from "@codemirror/state"
@@ -184,14 +185,42 @@ class CanvasWidget extends WidgetType {
 }
 
 
-export default class ExamplePlugin extends Plugin {
-  widgets: Map<string, CanvasWidget> = new Map();
+class TestWidget extends WidgetType {
+  constructor(text: string) {
+    super()
+    console.log("Creating new widget with text", text)
+  }
 
-  getWidget = (filePath: string) => {
-    let widget = this.widgets.get(filePath)
+  toDOM(view: EditorView) {
+    const image = new Image()
+    image.src = "https://external-content.duckduckgo.com/iu/?u=https%3A%2F%2Ftse1.mm.bing.net%2Fth%2Fid%2FOIP.wnpxq0AIyD66m1VHdaoSygHaHa%3Fpid%3DApi&f=1&ipt=a3ad9fc906f9af9ef721a67f49edeeb8e6d5be5a0ba973e49da1d6cf1a384f20&ipo=images"
+    return image
+  }
+
+  destroy() {
+    console.log("Destroying widget")
+  }
+}
+
+
+function findDecorationByFrom(decs: DecorationSet, from: number) {
+  const i = decs.iter(from-1)
+  console.log("Getting of range", i)
+  if (!i) {
+    return null
+  }
+  return i.from == from ? i.value : null
+}
+
+
+export default class ExamplePlugin extends Plugin {
+  widgets: Map<number, CanvasWidget> = new Map();
+
+  getWidget = (filePath: string, from: number) => {
+    let widget = this.widgets.get(from)
     if (!widget) {
       widget = new CanvasWidget(filePath, this.app) 
-      this.widgets.set(filePath, widget)
+      this.widgets.set(from, widget)
       return widget
     } else {
       return widget
@@ -202,28 +231,46 @@ export default class ExamplePlugin extends Plugin {
     const app = this.app
     const widgets = this.widgets
     const getWidget = this.getWidget
+    const tagOffset = 2
 
     const canvasField = StateField.define<DecorationSet>({
       create() {
-        const set =  Decoration.none
-        return set
+        return Decoration.none
       },
       update(canvasDecs, tr: Transaction) {
-        const decos: Range<Decoration>[] = []
+        console.log(tr.changes)
+        canvasDecs = canvasDecs.map(tr.changes)
+        const linkNodes: SyntaxNode[] = []
         syntaxTree(tr.state).iterate({
           enter(node) {
             if (node.type.name == "hmd-internal-link"
               && tr.state.doc.sliceString(node.from-3, node.from-2) == "?"
             ) {
+              linkNodes.push(node.node)
               const filePath = tr.state.doc.sliceString(node.from, node.to)
-              decos.push(Decoration.widget({
-                widget: getWidget(filePath),
-                block: true,
-              }).range(node.to + 2, node.to + 2))
+              const decoration = findDecorationByFrom(canvasDecs, node.to + tagOffset)
+              if (!decoration) {
+                // throw new Error("Did not find the decoration")
+                canvasDecs = canvasDecs.update({
+                  add: [Decoration.widget({
+                    widget: new CanvasWidget(filePath, app),
+                    block: true,
+                  }).range(node.to+tagOffset, node.to+tagOffset)]
+                })
+              }
             }
           }
         })
-        return Decoration.set(decos)
+        return canvasDecs.update({
+          filter: (from: number, to: number, value: Decoration) => {
+            for (let node of linkNodes) {
+              if (node.to + tagOffset === from) {
+                return true
+              }
+            }
+            return false
+          }
+        })
       },
 
       provide(field) {
