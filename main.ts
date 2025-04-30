@@ -25,12 +25,12 @@ import Konva from './node_modules/konva';
 const CANVAS_WIDTH = 700
 
 
-async function saveImage(canvas: HTMLCanvasElement, app: App, filePath: string) {
+async function saveImage(stage: Konva.Stage, app: App, filePath: string) {
   const buffer = await new Promise<ArrayBuffer>((resolve) => {
-    canvas.toBlob((blob) => {
+    stage.toBlob({callback: (blob) => {
       if (blob === null) throw new Error("Blob was null")
       blob.arrayBuffer().then(buffer => resolve(buffer))
-    }, 'image/png');  
+    }, mimeType: 'image/png'});  
   })
   const files = app.vault.getFiles()
   let pngFile = null
@@ -48,13 +48,12 @@ async function saveImage(canvas: HTMLCanvasElement, app: App, filePath: string) 
 }
 
 
-function loadImageOnCanvas(canvas: HTMLCanvasElement, app: App, filePath: string) {
+function loadImageOnStage(stage: Konva.Stage, app: App, filePath: string) {
   const imageFile = app.vault.getFileByPath(filePath)
   if (!imageFile) {
-    console.log("Could not find the canvas file", filePath)
-    canvas.width = 700 // This is the width of the notes
-    canvas.height = 700 / 1.41421356237 // This is the width of the notes
+    console.log("Could not find the file", filePath)
   } else {
+    const layer = new Konva.Layer();
     app.vault.readBinary(imageFile)
       .then(buffer => {
         const blob = new Blob([buffer], { type: 'image/png' });
@@ -64,122 +63,93 @@ function loadImageOnCanvas(canvas: HTMLCanvasElement, app: App, filePath: string
         return bitmap
       })
       .then(bitmap => {
-        const ctx = canvas.getContext("2d")
-        if (!ctx) throw new Error("Could not get 2d context");
-        
-        canvas.width = bitmap.width
-        canvas.height = bitmap.height
-        ctx.drawImage(bitmap, 0, 0) 
+        const image = new Konva.Image({
+          image: bitmap
+        })
+        layer.add(image)
+        stage.height(image.height())
+        stage.width(image.width())
       });
+      stage.add(layer);
   }
 }
 
 
-function hydrateCanvas(canvas: HTMLCanvasElement) {
-  const ctx = canvas.getContext("2d");
-  if (!ctx) throw new Error("Could not get 2d context");
-
-  const canvasRect = canvas.getBoundingClientRect();
-  const scaleX = canvas.width / canvasRect.width
-  const scaleY = canvas.height / canvasRect.height
-
-  let tool = "line"
-  let color = "white"
-  let mousedownPosition: {x: number, y: number} | null = null
-  let lastImage = ctx.getImageData(0, 0, canvas.width, canvas.height)
-
-  canvas.addEventListener('mousedown', ev => {
-    if (ev.button == 0) {
-      ctx.fillStyle = color
-      ctx.strokeStyle = color
-      mousedownPosition = {x: ev.offsetX, y: ev.offsetY}
-      lastImage = ctx.getImageData(0, 0, canvas.width, canvas.height)
-    }
-  })
+function initFreeDrawing(stage: Konva.Stage) {
+  const layer = new Konva.Layer();
+  stage.add(layer);
   
-  canvas.addEventListener('mousemove', ev => {
-    if (mousedownPosition) {
-      switch (tool) {
-        case "rectangle":
-        case 'line': 
-          if (!lastImage) {
-            console.log("lastImage not there")
-            return
-          }
-          ctx.putImageData(lastImage, 0, 0)
-        break;
-      }
+  let isPaint = false;
+  let mode = 'brush';
+  let lastLine: Konva.Line;
 
-      switch(tool) {
-        case "free": {
-          ctx.fillRect(ev.offsetX * scaleX, ev.offsetY * scaleY, 2, 2)
-        } break;
-        case "rectangle": 
-          ctx.strokeRect(mousedownPosition.x, mousedownPosition.y, ev.offsetX - mousedownPosition.x, ev.offsetY - mousedownPosition.y)
-          break;
-        case "line": 
-          ctx.beginPath()
-          ctx.moveTo(mousedownPosition.x, mousedownPosition.y)
-          ctx.lineTo(ev.offsetX, ev.offsetY)
-          ctx.closePath()
-          ctx.stroke()
-          break;
-      }
+  stage.on('mousedown touchstart', function (e) {
+    isPaint = true;
+    const pos = stage.getPointerPosition();
+    if (!pos) throw new Error("Could not get pointer position")
+    lastLine = new Konva.Line({
+      stroke: '#df4b26',
+      strokeWidth: 5,
+      globalCompositeOperation:
+        mode === 'brush' ? 'source-over' : 'destination-out',
+      // round cap for smoother lines
+      lineCap: 'round',
+      lineJoin: 'round',
+      // add point twice, so we have some drawings even on a simple click
+      points: [pos.x, pos.y, pos.x, pos.y],
+    });
+    layer.add(lastLine);
+  });
+
+  stage.on('mouseup touchend', function () {
+    isPaint = false;
+  });
+
+  // and core function - drawing
+  stage.on('mousemove touchmove', function (e) {
+    if (!isPaint) {
+      return;
     }
-  })
 
-  canvas.addEventListener('mouseup', async ev => {
-    mousedownPosition = null
-  })
-}
+    // prevent scrolling on touch devices
+    e.evt.preventDefault();
 
-
-function initCanvas(canvas: HTMLCanvasElement) {
-  const container = document.createElement('div')
-  container.appendChild(canvas)
-  hydrateCanvas(canvas)
-  const toolbar = document.createElement('div')
-
-  toolbar.style.position = 'relative';
-  toolbar.style.width = "600px";
-  toolbar.style.height = "50px";
-  toolbar.style.backgroundColor = "white";
-  container.appendChild(toolbar)
-  return container
+    const pos = stage.getPointerPosition();
+    if (!pos) throw new Error("Could not get pointer position")
+    const newPoints = lastLine.points().concat([pos.x, pos.y]);
+    lastLine.points(newPoints);
+  });
 }
 
 
 class CanvasWidget extends WidgetType {
-  canvas: HTMLCanvasElement | null = null;
   filePath: string
   app: App
+  stage: Konva.Stage
+  container: HTMLDivElement
 
   constructor(filePath: string, app: App) {
     super()
     this.filePath = filePath
     this.app = app
+    this.container = document.createElement("div")
+    this.stage = new Konva.Stage({
+      container: this.container,
+      width: CANVAS_WIDTH,
+      height: CANVAS_WIDTH / 1.4142,
+    });
+    const stage = this.stage
+  
+    loadImageOnStage(stage, this.app, this.filePath)
+    initFreeDrawing(stage)
   }
 
   toDOM(view: EditorView) {
-    const filePath = this.filePath
-    this.canvas = document.createElement("canvas")
-    const canvas = this.canvas
-    const ctx = canvas.getContext("2d")
-    if (!ctx) throw new Error("Could not get context");
-    
-    loadImageOnCanvas(canvas, this.app, filePath)
-    const container = initCanvas(canvas)
-
-    canvas.addEventListener('mouseup', async ev => {
-      // TODO: save button so user know when its saved
-      saveImage(canvas, this.app, filePath)
-    })
-    return container
+    return this.container
   }
 
-
-  get estimatedHeight() {
-    return this.canvas?.height || 0
+  destroy(dom: HTMLElement) {
+    const state = this.stage
   }
 }
 
