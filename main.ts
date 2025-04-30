@@ -19,6 +19,7 @@ import {DecorationSet} from "@codemirror/view"
 import {Decoration} from "@codemirror/view"
 import {RangeSetBuilder} from "@codemirror/state"
 
+import Konva from './node_modules/konva';
 
 
 const CANVAS_WIDTH = 700
@@ -82,58 +83,52 @@ function hydrateCanvas(canvas: HTMLCanvasElement) {
   const scaleX = canvas.width / canvasRect.width
   const scaleY = canvas.height / canvasRect.height
 
-  let drawing = false;
-  let isMouseDown = false
-  let tool = "rectangle"
+  let tool = "line"
   let color = "white"
   let mousedownPosition: {x: number, y: number} | null = null
   let lastImage = ctx.getImageData(0, 0, canvas.width, canvas.height)
+
   canvas.addEventListener('mousedown', ev => {
-    isMouseDown = true
-    ctx.fillStyle = color
-    mousedownPosition = {x: ev.offsetX, y: ev.offsetY}
-    lastImage = ctx.getImageData(0, 0, canvas.width, canvas.height)
+    if (ev.button == 0) {
+      ctx.fillStyle = color
+      ctx.strokeStyle = color
+      mousedownPosition = {x: ev.offsetX, y: ev.offsetY}
+      lastImage = ctx.getImageData(0, 0, canvas.width, canvas.height)
+    }
   })
   
   canvas.addEventListener('mousemove', ev => {
-    switch(tool) {
-      case "free": {
-        if (isMouseDown) {
+    if (mousedownPosition) {
+      switch (tool) {
+        case "rectangle":
+        case 'line': 
+          if (!lastImage) {
+            console.log("lastImage not there")
+            return
+          }
+          ctx.putImageData(lastImage, 0, 0)
+        break;
+      }
+
+      switch(tool) {
+        case "free": {
           ctx.fillRect(ev.offsetX * scaleX, ev.offsetY * scaleY, 2, 2)
-        }
-      } break;
-      case "rectangle": {
-        if (!isMouseDown) return
-        if (!lastImage) {
-          console.log("lastImage not there")
-          return
-        }
-        ctx.putImageData(lastImage, 0, 0)
-        if (!mousedownPosition) {
-          console.log("No starting point to draw rect")
-          return
-        }
-        ctx.strokeRect(mousedownPosition.x, mousedownPosition.y, ev.offsetX - mousedownPosition.x, ev.offsetY - mousedownPosition.y)
-      } break;
+        } break;
+        case "rectangle": 
+          ctx.strokeRect(mousedownPosition.x, mousedownPosition.y, ev.offsetX - mousedownPosition.x, ev.offsetY - mousedownPosition.y)
+          break;
+        case "line": 
+          ctx.beginPath()
+          ctx.moveTo(mousedownPosition.x, mousedownPosition.y)
+          ctx.lineTo(ev.offsetX, ev.offsetY)
+          ctx.closePath()
+          ctx.stroke()
+          break;
+      }
     }
   })
 
   canvas.addEventListener('mouseup', async ev => {
-    isMouseDown = false
-    switch (tool) {
-      case 'rectangle': {
-        if (!mousedownPosition) {
-          console.log("No starting point to draw rect")
-          return
-        }
-        if (!lastImage) {
-          console.log("lastImage not there")
-          return
-        }
-        ctx.putImageData(lastImage, 0, 0)
-        ctx.strokeRect(mousedownPosition.x, mousedownPosition.y, ev.offsetX - mousedownPosition.x, ev.offsetY - mousedownPosition.y)
-      } break;
-    }
     mousedownPosition = null
   })
 }
@@ -148,7 +143,6 @@ function initCanvas(canvas: HTMLCanvasElement) {
   toolbar.style.position = 'relative';
   toolbar.style.width = "600px";
   toolbar.style.height = "50px";
-  // toolbar.style.bottom = "-100px";
   toolbar.style.backgroundColor = "white";
   container.appendChild(toolbar)
   return container
@@ -177,6 +171,7 @@ class CanvasWidget extends WidgetType {
     const container = initCanvas(canvas)
 
     canvas.addEventListener('mouseup', async ev => {
+      // TODO: save button so user know when its saved
       saveImage(canvas, this.app, filePath)
     })
     return container
