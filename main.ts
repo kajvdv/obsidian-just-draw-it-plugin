@@ -205,11 +205,38 @@ class TestWidget extends WidgetType {
 
 function findDecorationByFrom(decs: DecorationSet, from: number) {
   const i = decs.iter(from-1)
-  console.log("Getting of range", i)
   if (!i) {
     return null
   }
   return i.from == from ? i.value : null
+}
+
+
+class HideTagPlugin {
+  decorations: DecorationSet
+
+  constructor(view: EditorView) {
+    this.decorations = Decoration.none
+  }
+
+  update(update: ViewUpdate) {
+    const cursor = update.state.selection.main.head
+    const currentLine = update.state.doc.lineAt(cursor)
+    this.decorations = Decoration.set([
+    ])
+    // syntaxTree(update.state).iterate({
+    //   enter(node) {
+    //     if (node.type.name == "hmd-internal-link"
+    //       && update.state.doc.sliceString(node.from-3, node.from-2) == "?"
+    //     ) {
+    //       this.decorations = Decoration.set([
+    //         Deco
+    //       ])
+    //     }
+    //   }
+    // })
+
+  }
 }
 
 
@@ -235,10 +262,10 @@ export default class ExamplePlugin extends Plugin {
 
     const canvasField = StateField.define<DecorationSet>({
       create() {
+        console.log("registering extention")
         return Decoration.none
       },
       update(canvasDecs, tr: Transaction) {
-        console.log(tr.changes)
         canvasDecs = canvasDecs.map(tr.changes)
         const linkNodes: SyntaxNode[] = []
         syntaxTree(tr.state).iterate({
@@ -250,17 +277,19 @@ export default class ExamplePlugin extends Plugin {
               const filePath = tr.state.doc.sliceString(node.from, node.to)
               const decoration = findDecorationByFrom(canvasDecs, node.to + tagOffset)
               if (!decoration) {
-                // throw new Error("Did not find the decoration")
                 canvasDecs = canvasDecs.update({
-                  add: [Decoration.widget({
-                    widget: new CanvasWidget(filePath, app),
-                    block: true,
-                  }).range(node.to+tagOffset, node.to+tagOffset)]
+                  add: [
+                    Decoration.widget({
+                      widget: new TestWidget("asdf"),
+                      block: true,
+                    }).range(node.to+tagOffset, node.to+tagOffset),
+                  ]
                 })
               }
             }
           }
         })
+        // return canvasDecs
         return canvasDecs.update({
           filter: (from: number, to: number, value: Decoration) => {
             for (let node of linkNodes) {
@@ -277,8 +306,45 @@ export default class ExamplePlugin extends Plugin {
         return EditorView.decorations.from(field)
       },
     })
+
+    const hideTag = StateField.define<DecorationSet>({
+      create() {
+        return Decoration.none
+      },
+      update(_, tr: Transaction) {
+        const decos: Range<Decoration>[] = []
+        const cursor = tr.state.selection.main.head
+        const currentLine = tr.state.doc.lineAt(cursor)
+        syntaxTree(tr.state).iterate({
+          enter(node) {
+            if (node.type.name == "hmd-internal-link"
+              && tr.state.doc.sliceString(node.from-3, node.from-2) == "?"
+            ) {
+              if (!(node.from-3 <= cursor && cursor <= node.to+2)) {
+                decos.push(Decoration.replace({}).range(node.from-4, node.to+2))
+              }
+            }
+          }
+        })
+        return Decoration.set(decos)
+      },
+      provide(field) {
+        return EditorView.decorations.from(field)
+      }
+    })
+
+    const hideCanvasTagPlugin = ViewPlugin.fromClass(
+      HideTagPlugin,
+      {
+        decorations: v => v.decorations
+      }
+    )
     
-    this.registerEditorExtension(canvasField);
+    this.registerEditorExtension([
+      canvasField,
+      // hideCanvasTagPlugin
+      hideTag
+    ]);
     
     this.registerMarkdownPostProcessor((element, context) => {
       // Replace all canvas tags with images
