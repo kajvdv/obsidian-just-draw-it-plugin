@@ -1,6 +1,6 @@
 import { syntaxTree } from '@codemirror/language';
 import { SyntaxNode } from '@lezer/common'
-import { Plugin, Editor, moment, App } from 'obsidian';
+import { Plugin, Editor, MarkdownView, moment, App } from 'obsidian';
 import {
   StateField,
   StateEffect,
@@ -188,17 +188,15 @@ class CanvasWidget extends WidgetType {
 class TestWidget extends WidgetType {
   constructor(text: string) {
     super()
-    console.log("Creating new widget with text", text)
   }
 
   toDOM(view: EditorView) {
     const image = new Image()
     image.src = "https://external-content.duckduckgo.com/iu/?u=https%3A%2F%2Ftse1.mm.bing.net%2Fth%2Fid%2FOIP.wnpxq0AIyD66m1VHdaoSygHaHa%3Fpid%3DApi&f=1&ipt=a3ad9fc906f9af9ef721a67f49edeeb8e6d5be5a0ba973e49da1d6cf1a384f20&ipo=images"
-    return image
-  }
-
-  destroy() {
-    console.log("Destroying widget")
+    image.className = "testname"
+    const container = document.createElement("div")
+    container.appendChild(image)
+    return container
   }
 }
 
@@ -258,7 +256,7 @@ export default class ExamplePlugin extends Plugin {
     const app = this.app
     const widgets = this.widgets
     const getWidget = this.getWidget
-    const tagOffset = 2
+    const tagOffset = 3
 
     const canvasField = StateField.define<DecorationSet>({
       create() {
@@ -268,11 +266,13 @@ export default class ExamplePlugin extends Plugin {
       update(canvasDecs, tr: Transaction) {
         canvasDecs = canvasDecs.map(tr.changes)
         const linkNodes: SyntaxNode[] = []
+        // console.log(tr.state.doc.text)
         syntaxTree(tr.state).iterate({
           enter(node) {
             if (node.type.name == "hmd-internal-link"
               && tr.state.doc.sliceString(node.from-3, node.from-2) == "?"
             ) {
+              // console.log(tr.state.doc.sliceString(node.from-3, node.to+5))
               linkNodes.push(node.node)
               const filePath = tr.state.doc.sliceString(node.from, node.to)
               const decoration = findDecorationByFrom(canvasDecs, node.to + tagOffset)
@@ -290,7 +290,7 @@ export default class ExamplePlugin extends Plugin {
           }
         })
         // return canvasDecs
-        return canvasDecs.update({
+        canvasDecs = canvasDecs.update({
           filter: (from: number, to: number, value: Decoration) => {
             for (let node of linkNodes) {
               if (node.to + tagOffset === from) {
@@ -300,6 +300,23 @@ export default class ExamplePlugin extends Plugin {
             return false
           }
         })
+
+        // const cursor = tr.state.selection.main.head
+        // syntaxTree(tr.state).iterate({
+        //   enter(node) {
+        //     if (node.type.name == "hmd-internal-link"
+        //       && tr.state.doc.sliceString(node.from-3, node.from-2) == "?"
+        //     ) {
+        //       if (!(node.from-3 <= cursor && cursor <= node.to+2)) {
+        //         canvasDecs = canvasDecs.update({add: [
+        //           Decoration.replace({}).range(node.from-3, node.to+2)
+        //         ]})
+        //       }
+        //     }
+        //   }
+        // })
+
+        return canvasDecs
       },
 
       provide(field) {
@@ -314,6 +331,7 @@ export default class ExamplePlugin extends Plugin {
       update(_, tr: Transaction) {
         const decos: Range<Decoration>[] = []
         const cursor = tr.state.selection.main.head
+        console.log("cursor", cursor)
         const currentLine = tr.state.doc.lineAt(cursor)
         syntaxTree(tr.state).iterate({
           enter(node) {
@@ -321,7 +339,9 @@ export default class ExamplePlugin extends Plugin {
               && tr.state.doc.sliceString(node.from-3, node.from-2) == "?"
             ) {
               if (!(node.from-3 <= cursor && cursor <= node.to+2)) {
-                decos.push(Decoration.replace({}).range(node.from-4, node.to+2))
+                decos.push(Decoration.replace({
+                  block: true
+                }).range(node.from-4, node.to+2))
               }
             }
           }
@@ -339,6 +359,22 @@ export default class ExamplePlugin extends Plugin {
         decorations: v => v.decorations
       }
     )
+
+    // Atomic ranges
+    const widgetAtomicRanges = ViewPlugin.fromClass(class {
+      placeholders: DecorationSet
+      constructor(view: EditorView) {
+        this.placeholders = Decoration.none
+      }
+      update(update: ViewUpdate) {
+        
+      }
+    }, {
+      // decorations: instance => instance.placeholders,
+      provide: plugin => EditorView.atomicRanges.of(view => {
+        return view.plugin(plugin)?.placeholders || Decoration.none
+      })
+    })
     
     this.registerEditorExtension([
       canvasField,
