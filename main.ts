@@ -144,14 +144,13 @@ class CanvasWidget extends WidgetType {
   
     loadImageOnStage(stage, this.app, this.filePath)
     initFreeDrawing(stage)
+    stage.on('mouseup touchend', function () {
+      saveImage(stage, app, filePath)
+    });
   }
 
   toDOM(view: EditorView) {
     return this.container
-  }
-
-  destroy(dom: HTMLElement) {
-    const state = this.stage
   }
 }
 
