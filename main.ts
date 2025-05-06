@@ -155,28 +155,37 @@ class CanvasWidget extends WidgetType {
   canvas: HTMLCanvasElement | null = null;
   filePath: string
   app: App
+  container: HTMLDivElement
+  cursorEventHandler: () => undefined = () => undefined
 
   constructor(filePath: string, app: App) {
     super()
     this.filePath = filePath
     this.app = app
-  }
 
-  toDOM(view: EditorView) {
-    const filePath = this.filePath
     this.canvas = document.createElement("canvas")
     const canvas = this.canvas
     const ctx = canvas.getContext("2d")
     if (!ctx) throw new Error("Could not get context");
     
     loadImageOnCanvas(canvas, this.app, filePath)
-    const container = initCanvas(canvas)
+    this.container = initCanvas(canvas)
+  }
+  
+  toDOM(view: EditorView) {
+    this.cursorEventHandler = () => {
+      const rect = this.container.getBoundingClientRect()
+      const pos = view.posAtCoords(rect)
+      if (!pos)
+        return undefined
+      view.dispatch(view.state.update({selection: EditorSelection.cursor(pos)}))
+    }
+    this.container.addEventListener("mousedown", this.cursorEventHandler)
+    return this.container
+  }
 
-    canvas.addEventListener('mouseup', async ev => {
-      // TODO: save button so user know when its saved
-      saveImage(canvas, this.app, filePath)
-    })
-    return container
+  destroy() {
+    this.container.removeEventListener('mousedown', this.cursorEventHandler)
   }
 
 
