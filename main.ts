@@ -6,6 +6,7 @@ import {
   StateEffect,
   Transaction,
   Range,
+  EditorSelection
 } from '@codemirror/state';
 import {
   ViewUpdate,
@@ -196,6 +197,12 @@ class TestWidget extends WidgetType {
     image.className = "testname"
     const container = document.createElement("div")
     container.appendChild(image)
+
+    container.addEventListener("click", ev => {
+      const rect = container.getBoundingClientRect()
+      const pos = view.posAtCoords(rect)
+      view.dispatch(view.state.update({selection: EditorSelection.cursor(pos)}))
+    })
     return container
   }
 }
@@ -256,7 +263,7 @@ export default class ExamplePlugin extends Plugin {
     const app = this.app
     const widgets = this.widgets
     const getWidget = this.getWidget
-    const tagOffset = 3
+    const tagOffset = 2
 
     const canvasField = StateField.define<DecorationSet>({
       create() {
@@ -281,7 +288,8 @@ export default class ExamplePlugin extends Plugin {
                   add: [
                     Decoration.widget({
                       widget: new TestWidget("asdf"),
-                      block: true,
+                      side: 1
+                      // block: true,
                     }).range(node.to+tagOffset, node.to+tagOffset),
                   ]
                 })
@@ -340,7 +348,8 @@ export default class ExamplePlugin extends Plugin {
             ) {
               if (!(node.from-3 <= cursor && cursor <= node.to+2)) {
                 decos.push(Decoration.replace({
-                  block: true
+                  // block: true,
+                  side: 0
                 }).range(node.from-4, node.to+2))
               }
             }
