@@ -129,6 +129,7 @@ class CanvasWidget extends WidgetType {
   app: App
   stage: Konva.Stage
   container: HTMLDivElement
+  cursorEventHandler: () => undefined = () => undefined
 
   constructor(filePath: string, app: App) {
     super()
@@ -150,7 +151,19 @@ class CanvasWidget extends WidgetType {
   }
 
   toDOM(view: EditorView) {
+    this.cursorEventHandler = () => {
+      const rect = this.container.getBoundingClientRect()
+      const pos = view.posAtCoords(rect)
+      if (!pos)
+        return undefined
+      view.dispatch(view.state.update({selection: EditorSelection.cursor(pos)}))
+    }
+    this.container.addEventListener("mousedown", this.cursorEventHandler)
     return this.container
+  }
+
+  destroy() {
+    this.container.removeEventListener('mousedown', this.cursorEventHandler)
   }
 }
 
