@@ -186,28 +186,6 @@ class CanvasWidget extends WidgetType {
 }
 
 
-class TestWidget extends WidgetType {
-  constructor(text: string) {
-    super()
-  }
-
-  toDOM(view: EditorView) {
-    const image = new Image()
-    image.src = "https://external-content.duckduckgo.com/iu/?u=https%3A%2F%2Ftse1.mm.bing.net%2Fth%2Fid%2FOIP.wnpxq0AIyD66m1VHdaoSygHaHa%3Fpid%3DApi&f=1&ipt=a3ad9fc906f9af9ef721a67f49edeeb8e6d5be5a0ba973e49da1d6cf1a384f20&ipo=images"
-    image.className = "testname"
-    const container = document.createElement("div")
-    container.appendChild(image)
-
-    container.addEventListener("click", ev => {
-      const rect = container.getBoundingClientRect()
-      const pos = view.posAtCoords(rect)
-      view.dispatch(view.state.update({selection: EditorSelection.cursor(pos)}))
-    })
-    return container
-  }
-}
-
-
 function findDecorationByFrom(decs: DecorationSet, from: number) {
   const i = decs.iter(from-1)
   if (!i) {
@@ -217,69 +195,22 @@ function findDecorationByFrom(decs: DecorationSet, from: number) {
 }
 
 
-class HideTagPlugin {
-  decorations: DecorationSet
-
-  constructor(view: EditorView) {
-    this.decorations = Decoration.none
-  }
-
-  update(update: ViewUpdate) {
-    const cursor = update.state.selection.main.head
-    const currentLine = update.state.doc.lineAt(cursor)
-    this.decorations = Decoration.set([
-    ])
-    // syntaxTree(update.state).iterate({
-    //   enter(node) {
-    //     if (node.type.name == "hmd-internal-link"
-    //       && update.state.doc.sliceString(node.from-3, node.from-2) == "?"
-    //     ) {
-    //       this.decorations = Decoration.set([
-    //         Deco
-    //       ])
-    //     }
-    //   }
-    // })
-
-  }
-}
-
-
 export default class ExamplePlugin extends Plugin {
-  widgets: Map<number, CanvasWidget> = new Map();
-
-  getWidget = (filePath: string, from: number) => {
-    let widget = this.widgets.get(from)
-    if (!widget) {
-      widget = new CanvasWidget(filePath, this.app) 
-      this.widgets.set(from, widget)
-      return widget
-    } else {
-      return widget
-    }
-  }
-
   async onload() {
     const app = this.app
-    const widgets = this.widgets
-    const getWidget = this.getWidget
     const tagOffset = 2
-
     const canvasField = StateField.define<DecorationSet>({
       create() {
-        console.log("registering extention")
         return Decoration.none
       },
       update(canvasDecs, tr: Transaction) {
         canvasDecs = canvasDecs.map(tr.changes)
         const linkNodes: SyntaxNode[] = []
-        // console.log(tr.state.doc.text)
         syntaxTree(tr.state).iterate({
           enter(node) {
             if (node.type.name == "hmd-internal-link"
               && tr.state.doc.sliceString(node.from-3, node.from-2) == "?"
             ) {
-              // console.log(tr.state.doc.sliceString(node.from-3, node.to+5))
               linkNodes.push(node.node)
               const filePath = tr.state.doc.sliceString(node.from, node.to)
               const decoration = findDecorationByFrom(canvasDecs, node.to + tagOffset)
@@ -287,9 +218,8 @@ export default class ExamplePlugin extends Plugin {
                 canvasDecs = canvasDecs.update({
                   add: [
                     Decoration.widget({
-                      widget: new TestWidget("asdf"),
+                      widget: new CanvasWidget(filePath, app),
                       side: 1
-                      // block: true,
                     }).range(node.to+tagOffset, node.to+tagOffset),
                   ]
                 })
@@ -297,7 +227,6 @@ export default class ExamplePlugin extends Plugin {
             }
           }
         })
-        // return canvasDecs
         canvasDecs = canvasDecs.update({
           filter: (from: number, to: number, value: Decoration) => {
             for (let node of linkNodes) {
@@ -308,22 +237,6 @@ export default class ExamplePlugin extends Plugin {
             return false
           }
         })
-
-        // const cursor = tr.state.selection.main.head
-        // syntaxTree(tr.state).iterate({
-        //   enter(node) {
-        //     if (node.type.name == "hmd-internal-link"
-        //       && tr.state.doc.sliceString(node.from-3, node.from-2) == "?"
-        //     ) {
-        //       if (!(node.from-3 <= cursor && cursor <= node.to+2)) {
-        //         canvasDecs = canvasDecs.update({add: [
-        //           Decoration.replace({}).range(node.from-3, node.to+2)
-        //         ]})
-        //       }
-        //     }
-        //   }
-        // })
-
         return canvasDecs
       },
 
@@ -347,10 +260,7 @@ export default class ExamplePlugin extends Plugin {
               && tr.state.doc.sliceString(node.from-3, node.from-2) == "?"
             ) {
               if (!(node.from-3 <= cursor && cursor <= node.to+2)) {
-                decos.push(Decoration.replace({
-                  // block: true,
-                  side: 0
-                }).range(node.from-4, node.to+2))
+                decos.push(Decoration.replace({}).range(node.from-4, node.to+2))
               }
             }
           }
@@ -361,33 +271,9 @@ export default class ExamplePlugin extends Plugin {
         return EditorView.decorations.from(field)
       }
     })
-
-    const hideCanvasTagPlugin = ViewPlugin.fromClass(
-      HideTagPlugin,
-      {
-        decorations: v => v.decorations
-      }
-    )
-
-    // Atomic ranges
-    const widgetAtomicRanges = ViewPlugin.fromClass(class {
-      placeholders: DecorationSet
-      constructor(view: EditorView) {
-        this.placeholders = Decoration.none
-      }
-      update(update: ViewUpdate) {
-        
-      }
-    }, {
-      // decorations: instance => instance.placeholders,
-      provide: plugin => EditorView.atomicRanges.of(view => {
-        return view.plugin(plugin)?.placeholders || Decoration.none
-      })
-    })
     
     this.registerEditorExtension([
       canvasField,
-      // hideCanvasTagPlugin
       hideTag
     ]);
     
