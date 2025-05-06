@@ -1,10 +1,12 @@
 import { syntaxTree } from '@codemirror/language';
-import { Plugin, Editor, moment, App } from 'obsidian';
+import { SyntaxNode } from '@lezer/common'
+import { Plugin, Editor, MarkdownView, moment, App } from 'obsidian';
 import {
   StateField,
   StateEffect,
   Transaction,
   Range,
+  EditorSelection
 } from '@codemirror/state';
 import {
   ViewUpdate,
@@ -14,7 +16,7 @@ import {
   WidgetType,
 } from '@codemirror/view';
 import {Facet} from "@codemirror/state"
-import {Extension} from "@codemirror/state"
+import {Extension, RangeSet} from "@codemirror/state"
 import {DecorationSet} from "@codemirror/view"
 import {Decoration} from "@codemirror/view"
 import {RangeSetBuilder} from "@codemirror/state"
@@ -154,54 +156,96 @@ class CanvasWidget extends WidgetType {
 }
 
 
-export default class ExamplePlugin extends Plugin {
-  widgets: Map<string, CanvasWidget> = new Map();
-
-  getWidget = (filePath: string) => {
-    let widget = this.widgets.get(filePath)
-    if (!widget) {
-      widget = new CanvasWidget(filePath, this.app) 
-      this.widgets.set(filePath, widget)
-      return widget
-    } else {
-      return widget
-    }
+function findDecorationByFrom(decs: DecorationSet, from: number) {
+  const i = decs.iter(from-1)
+  if (!i) {
+    return null
   }
+  return i.from == from ? i.value : null
+}
 
+
+export default class ExamplePlugin extends Plugin {
   async onload() {
     const app = this.app
-    const widgets = this.widgets
-    const getWidget = this.getWidget
-
+    const tagOffset = 2
     const canvasField = StateField.define<DecorationSet>({
       create() {
-        const set =  Decoration.none
-        return set
+        return Decoration.none
       },
       update(canvasDecs, tr: Transaction) {
-        const decos: Range<Decoration>[] = []
+        canvasDecs = canvasDecs.map(tr.changes)
+        const linkNodes: SyntaxNode[] = []
         syntaxTree(tr.state).iterate({
           enter(node) {
             if (node.type.name == "hmd-internal-link"
               && tr.state.doc.sliceString(node.from-3, node.from-2) == "?"
             ) {
+              linkNodes.push(node.node)
               const filePath = tr.state.doc.sliceString(node.from, node.to)
-              decos.push(Decoration.widget({
-                widget: getWidget(filePath),
-                block: true,
-              }).range(node.to + 2, node.to + 2))
+              const decoration = findDecorationByFrom(canvasDecs, node.to + tagOffset)
+              if (!decoration) {
+                canvasDecs = canvasDecs.update({
+                  add: [
+                    Decoration.widget({
+                      widget: new CanvasWidget(filePath, app),
+                      side: 1
+                    }).range(node.to+tagOffset, node.to+tagOffset),
+                  ]
+                })
+              }
             }
           }
         })
-        return Decoration.set(decos)
+        canvasDecs = canvasDecs.update({
+          filter: (from: number, to: number, value: Decoration) => {
+            for (let node of linkNodes) {
+              if (node.to + tagOffset === from) {
+                return true
+              }
+            }
+            return false
+          }
+        })
+        return canvasDecs
       },
 
       provide(field) {
         return EditorView.decorations.from(field)
       },
     })
+
+    const hideTag = StateField.define<DecorationSet>({
+      create() {
+        return Decoration.none
+      },
+      update(_, tr: Transaction) {
+        const decos: Range<Decoration>[] = []
+        const cursor = tr.state.selection.main.head
+        console.log("cursor", cursor)
+        const currentLine = tr.state.doc.lineAt(cursor)
+        syntaxTree(tr.state).iterate({
+          enter(node) {
+            if (node.type.name == "hmd-internal-link"
+              && tr.state.doc.sliceString(node.from-3, node.from-2) == "?"
+            ) {
+              if (!(node.from-3 <= cursor && cursor <= node.to+2)) {
+                decos.push(Decoration.replace({}).range(node.from-4, node.to+2))
+              }
+            }
+          }
+        })
+        return Decoration.set(decos)
+      },
+      provide(field) {
+        return EditorView.decorations.from(field)
+      }
+    })
     
-    this.registerEditorExtension(canvasField);
+    this.registerEditorExtension([
+      canvasField,
+      hideTag
+    ]);
     
     this.registerMarkdownPostProcessor((element, context) => {
       // Replace all canvas tags with images
