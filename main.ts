@@ -1,6 +1,6 @@
 import { syntaxTree } from '@codemirror/language';
 import { SyntaxNode } from '@lezer/common'
-import { Plugin, Editor, MarkdownView, moment, App } from 'obsidian';
+import { Plugin, Editor, MarkdownView, moment, App, Notice } from 'obsidian';
 import {
   StateField,
   StateEffect,
@@ -77,23 +77,20 @@ function loadImageOnStage(stage: Konva.Stage, app: App, filePath: string) {
 }
 
 
-function initFreeDrawing(stage: Konva.Stage) {
+function getFreeDrawHandlers(stage: Konva.Stage) {
   const layer = new Konva.Layer();
   stage.add(layer);
-  
   let isPaint = false;
-  let mode = 'brush';
   let lastLine: Konva.Line;
 
-  stage.on('mousedown touchstart', function (e) {
+  function mouseDownHandler() {
     isPaint = true;
     const pos = stage.getPointerPosition();
     if (!pos) throw new Error("Could not get pointer position")
     lastLine = new Konva.Line({
       stroke: '#df4b26',
       strokeWidth: 5,
-      globalCompositeOperation:
-        mode === 'brush' ? 'source-over' : 'destination-out',
+      globalCompositeOperation: 'source-over',
       // round cap for smoother lines
       lineCap: 'round',
       lineJoin: 'round',
@@ -101,26 +98,46 @@ function initFreeDrawing(stage: Konva.Stage) {
       points: [pos.x, pos.y, pos.x, pos.y],
     });
     layer.add(lastLine);
-  });
+  }
 
-  stage.on('mouseup touchend', function () {
-    isPaint = false;
-  });
+  function mouseUpHandler() {
+    isPaint = false
+  }
 
-  // and core function - drawing
-  stage.on('mousemove touchmove', function (e) {
+  function mouseMoveHandler() {
     if (!isPaint) {
       return;
     }
-
-    // prevent scrolling on touch devices
-    e.evt.preventDefault();
-
     const pos = stage.getPointerPosition();
-    if (!pos) throw new Error("Could not get pointer position")
+    if (!pos)
+      throw new Error("Could not get pointer position")
     const newPoints = lastLine.points().concat([pos.x, pos.y]);
     lastLine.points(newPoints);
-  });
+  }
+
+  return {
+    mouseDownHandler,
+    mouseUpHandler,
+    mouseMoveHandler
+  }
+}
+
+
+function initFreeDrawing(stage: Konva.Stage) {
+  const handlers = getFreeDrawHandlers(stage)
+
+  stage.on('mousedown touchstart', handlers.mouseDownHandler);
+  stage.on('mouseup touchend', handlers.mouseUpHandler);
+  const f: Konva.KonvaEventListener<typeof stage, any> = (e) => {
+    e.evt.preventDefault();
+    handlers.mouseMoveHandler()
+  }
+  stage.on('mousemove touchmove', f);
+  return function cleanupHandlers() {
+    stage.off('mousedown touchstart', handlers.mouseDownHandler)
+    stage.off('mouseup touchend', handlers.mouseUpHandler);
+    stage.off('mousemove touchmove', f)
+  }
 }
 
 
@@ -136,18 +153,54 @@ class CanvasWidget extends WidgetType {
     this.filePath = filePath
     this.app = app
     this.container = document.createElement("div")
+    this.container.style.display = 'flex'
+    const konvaContainer = document.createElement('div')
     this.stage = new Konva.Stage({
-      container: this.container,
+      container: konvaContainer,
       width: CANVAS_WIDTH,
       height: CANVAS_WIDTH / 1.4142,
     });
+    this.container.appendChild(konvaContainer)
     const stage = this.stage
   
     loadImageOnStage(stage, this.app, this.filePath)
-    initFreeDrawing(stage)
-    stage.on('mouseup touchend', function () {
+    let unloadTool: (() => void) | undefined = undefined
+    const toolbar = document.createElement('div')
+    toolbar.style.backgroundColor = 'grey'
+    toolbar.style.position = 'relative'
+
+    let tool = ""
+
+    const saveBtn = document.createElement('button')
+    saveBtn.className = 'toolbar-btn'
+    saveBtn.textContent = 'Save'
+    saveBtn.addEventListener('click', ev => {
       saveImage(stage, app, filePath)
-    });
+      new Notice(`Drawing saved as ${filePath}`);
+    })
+    const brushBtn = document.createElement('button')
+    brushBtn.className = 'toolbar-btn'
+    brushBtn.textContent = 'Brush'
+    brushBtn.addEventListener('click', ev => {
+      if (unloadTool)
+        unloadTool();
+      if (tool != "brush") {
+        unloadTool = initFreeDrawing(stage)
+        tool = 'brush'
+      } else {
+        tool = ""
+      }
+    })
+
+    const rectBtn = document.createElement('button')
+    rectBtn.className = 'toolbar-btn'
+    rectBtn.textContent = 'Rect'
+    
+    toolbar.appendChild(saveBtn)
+    toolbar.appendChild(brushBtn)
+    toolbar.appendChild(rectBtn)
+    
+    this.container.appendChild(toolbar)
   }
 
   toDOM(view: EditorView) {
