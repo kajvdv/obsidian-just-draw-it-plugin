@@ -1,3 +1,7 @@
 .toolbar-btn {
     width: 100%;
 }
+
+.selected-btn {
+    background-color: rgb(133, 133, 133) !important;
+}

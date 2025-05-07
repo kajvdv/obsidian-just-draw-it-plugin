@@ -175,8 +175,7 @@ function getRectDrawHandlers(stage: Konva.Stage) {
       y: anchor.y,
       width: pos.x - anchor.x,
       height: pos.y - anchor.y,
-      fill: 'green',
-      stroke: 'black',
+      stroke: 'white',
       strokeWidth: 2
     })
     lastRect = rect
@@ -202,6 +201,7 @@ function initRectDrawing(stage: Konva.Stage) {
   }
   stage.on('mousemove touchmove', f);
   return function cleanupHandlers() {
+    // TODO: Remove layers after added to the stage
     stage.off('mousedown touchstart', handlers.mouseDownHandler)
     stage.off('mouseup touchend', handlers.mouseUpHandler);
     stage.off('mousemove touchmove', f)
@@ -256,8 +256,11 @@ class CanvasWidget extends WidgetType {
       if (tool != "brush") {
         unloadTool = initFreeDrawing(stage)
         tool = 'brush'
+        brushBtn.classList.add('selected-btn')
+        rectBtn.className = 'toolbar-btn'
       } else {
         tool = ""
+        brushBtn.className = 'toolbar-btn'
         unloadTool = undefined
       }
     })
@@ -275,8 +278,11 @@ class CanvasWidget extends WidgetType {
       if (tool != "rect") {
         unloadTool = initRectDrawing(stage)
         tool = 'rect'
+        rectBtn.classList.add('selected-btn')
+        brushBtn.className = 'toolbar-btn' 
       } else {
         tool = ""
+        rectBtn.className = 'toolbar-btn'
         unloadTool = undefined
       }
     })
