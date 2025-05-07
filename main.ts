@@ -141,6 +141,74 @@ function initFreeDrawing(stage: Konva.Stage) {
 }
 
 
+function getRectDrawHandlers(stage: Konva.Stage) {
+  const layer = new Konva.Layer()
+  stage.add(layer)
+  
+  let isDown = false
+  let anchor: Konva.Vector2d
+  let lastRect: Konva.Rect | null
+  
+  function mouseDownHandler() {
+    isDown = true
+    const pos = stage.getPointerPosition();
+    if (!pos)
+      throw new Error("Could not get position")
+    anchor = pos
+  }
+
+  function mouseUpHandler() {
+    isDown = false
+    lastRect = null
+  }
+
+  function mouseMoveHandler() {
+    if (!isDown)
+      return
+    if (lastRect)
+      lastRect.destroy();
+    const pos = stage.getPointerPosition();
+    if (!pos)
+      throw new Error("Could not get position")
+    const rect = new Konva.Rect({
+      x: anchor.x,
+      y: anchor.y,
+      width: pos.x - anchor.x,
+      height: pos.y - anchor.y,
+      fill: 'green',
+      stroke: 'black',
+      strokeWidth: 2
+    })
+    lastRect = rect
+    layer.add(rect)
+  }
+
+  return {
+    mouseDownHandler,
+    mouseUpHandler,
+    mouseMoveHandler
+  }
+}
+
+
+function initRectDrawing(stage: Konva.Stage) {
+  const handlers = getRectDrawHandlers(stage)
+
+  stage.on('mousedown touchstart', handlers.mouseDownHandler);
+  stage.on('mouseup touchend', handlers.mouseUpHandler);
+  const f: Konva.KonvaEventListener<typeof stage, any> = (e) => {
+    e.evt.preventDefault();
+    handlers.mouseMoveHandler()
+  }
+  stage.on('mousemove touchmove', f);
+  return function cleanupHandlers() {
+    stage.off('mousedown touchstart', handlers.mouseDownHandler)
+    stage.off('mouseup touchend', handlers.mouseUpHandler);
+    stage.off('mousemove touchmove', f)
+  }
+}
+
+
 class CanvasWidget extends WidgetType {
   filePath: string
   app: App
@@ -177,6 +245,7 @@ class CanvasWidget extends WidgetType {
     saveBtn.addEventListener('click', ev => {
       saveImage(stage, app, filePath)
       new Notice(`Drawing saved as ${filePath}`);
+      tool = ""
     })
     const brushBtn = document.createElement('button')
     brushBtn.className = 'toolbar-btn'
@@ -189,6 +258,7 @@ class CanvasWidget extends WidgetType {
         tool = 'brush'
       } else {
         tool = ""
+        unloadTool = undefined
       }
     })
 
@@ -199,6 +269,17 @@ class CanvasWidget extends WidgetType {
     toolbar.appendChild(saveBtn)
     toolbar.appendChild(brushBtn)
     toolbar.appendChild(rectBtn)
+    rectBtn.addEventListener('click', ev => {
+      if (unloadTool)
+        unloadTool();
+      if (tool != "rect") {
+        unloadTool = initRectDrawing(stage)
+        tool = 'rect'
+      } else {
+        tool = ""
+        unloadTool = undefined
+      }
+    })
     
     this.container.appendChild(toolbar)
   }
@@ -287,7 +368,6 @@ export default class ExamplePlugin extends Plugin {
       update(_, tr: Transaction) {
         const decos: Range<Decoration>[] = []
         const cursor = tr.state.selection.main.head
-        console.log("cursor", cursor)
         const currentLine = tr.state.doc.lineAt(cursor)
         syntaxTree(tr.state).iterate({
           enter(node) {
