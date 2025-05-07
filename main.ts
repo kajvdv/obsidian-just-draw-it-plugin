@@ -245,7 +245,11 @@ class CanvasWidget extends WidgetType {
     saveBtn.addEventListener('click', ev => {
       saveImage(stage, app, filePath)
       new Notice(`Drawing saved as ${filePath}`);
+      if (unloadTool)
+        unloadTool();
       tool = ""
+      brushBtn.className = 'toolbar-btn'
+      rectBtn.className = 'toolbar-btn'
     })
     const brushBtn = document.createElement('button')
     brushBtn.className = 'toolbar-btn'
