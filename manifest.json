@@ -2,10 +2,9 @@
 	"id": "draw-stuff",
 	"name": "Draw Stuff",
 	"version": "0.1.0",
-	"minAppVersion": "0.15.0",
+	"minAppVersion": "1.8.10",
 	"description": "Just draw some stuff u know.",
 	"author": "Kaj van der Valk",
-	"authorUrl": "https://obsidian.md",
-	"fundingUrl": "https://obsidian.md/pricing",
+	"authorUrl": "https://github.com/kajvdv",
 	"isDesktopOnly": false
 }

@@ -1,6 +1,14 @@
 import { syntaxTree } from '@codemirror/language';
 import { SyntaxNode } from '@lezer/common'
-import { Plugin, Editor, MarkdownView, moment, App, Notice } from 'obsidian';
+import {
+  Plugin,
+  Editor,
+  MarkdownView,
+  moment,
+  App,
+  Notice,
+  setIcon
+} from 'obsidian';
 import {
   StateField,
   StateEffect,
@@ -234,14 +242,13 @@ class CanvasWidget extends WidgetType {
     loadImageOnStage(stage, this.app, this.filePath)
     let unloadTool: (() => void) | undefined = undefined
     const toolbar = document.createElement('div')
-    toolbar.style.backgroundColor = 'grey'
     toolbar.style.position = 'relative'
 
     let tool = ""
 
     const saveBtn = document.createElement('button')
     saveBtn.className = 'toolbar-btn'
-    saveBtn.textContent = 'Save'
+    setIcon(saveBtn, 'save')
     saveBtn.addEventListener('click', ev => {
       saveImage(stage, app, filePath)
       new Notice(`Drawing saved as ${filePath}`);
@@ -253,7 +260,7 @@ class CanvasWidget extends WidgetType {
     })
     const brushBtn = document.createElement('button')
     brushBtn.className = 'toolbar-btn'
-    brushBtn.textContent = 'Brush'
+    setIcon(brushBtn, 'brush')
     brushBtn.addEventListener('click', ev => {
       if (unloadTool)
         unloadTool();
@@ -271,7 +278,8 @@ class CanvasWidget extends WidgetType {
 
     const rectBtn = document.createElement('button')
     rectBtn.className = 'toolbar-btn'
-    rectBtn.textContent = 'Rect'
+    setIcon(rectBtn, 'square')
+
     
     toolbar.appendChild(saveBtn)
     toolbar.appendChild(brushBtn)
