@@ -393,7 +393,12 @@ export default class ExamplePlugin extends Plugin {
               && tr.state.doc.sliceString(node.from-3, node.from-2) == "?"
             ) {
               if (!(node.from-3 <= cursor && cursor <= node.to+2)) {
-                decos.push(Decoration.replace({}).range(node.from-4, node.to+2))
+                const charBefore = tr.state.doc.sliceString(node.from-4, node.from-3)
+                if (charBefore == '\n') {
+                  decos.push(Decoration.replace({}).range(node.from-4, node.to+2))
+                } else {
+                  decos.push(Decoration.replace({}).range(node.from-3, node.to+2))
+                }
               }
             }
           }
