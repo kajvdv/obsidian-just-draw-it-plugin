@@ -404,20 +404,36 @@ export default class ExamplePlugin extends Plugin {
     
     this.registerMarkdownPostProcessor((element, context) => {
       // Replace all canvas tags with images
-      const filePath = 'testfile.png'
-      const file = this.app.vault.getFileByPath(filePath)
-      if (!file) return
-      console.log("Rendering image")
-      this.app.vault.readBinary(file)
-        .then(arrayBuffer => {
-          const blob = new Blob([arrayBuffer], { type: 'image/png' });
-          const imgURL = URL.createObjectURL(blob);
-    
-          // Create and insert the <img> tag
-          const img = document.createElement('img');
-          img.src = imgURL
-          element.appendChild(img)
-        })
+      const sectionInfo = context.getSectionInfo(element)
+      if (!sectionInfo)
+        throw new Error("Could not get section info when rendering to markdown")
+      const canvasTagsRegex = /\?\[\[.*\]\]/g
+      const tags = sectionInfo.text.matchAll(canvasTagsRegex)
+      const embedLinks = element.querySelectorAll('a.internal-link')
+      if (!embedLinks)
+        return
+      for (let link of embedLinks) {
+        if (link.previousSibling?.textContent?.at(-1) === "?") {
+          const filePath = link.textContent
+          if (!filePath)
+            continue//on your journey
+          const file = this.app.vault.getFileByPath(filePath)
+          if (!file) {
+            console.error("Could not find file to render markdown");
+            continue
+          }
+          this.app.vault.readBinary(file)
+          .then(arrayBuffer => {
+            const blob = new Blob([arrayBuffer], { type: 'image/png' });
+            const imgURL = URL.createObjectURL(blob);
+            const img = document.createElement('img');
+            img.src = imgURL
+            link.parentElement?.insertBefore(img, link.nextSibling)//
+            link.previousSibling?.remove()
+            link.remove()
+          })
+        }
+      }
     });
   }
 
