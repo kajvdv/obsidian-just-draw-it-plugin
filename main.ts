@@ -348,6 +348,8 @@ export default class ExamplePlugin extends Plugin {
               linkNodes.push(node.node)
               const filePath = tr.state.doc.sliceString(node.from, node.to)
               const decoration = findDecorationByFrom(canvasDecs, node.to + tagOffset)
+              // TODO: Fix behaviour on pressing enter after tag
+              const line = tr.state.doc.lineAt(node.to)
               if (!decoration) {
                 canvasDecs = canvasDecs.update({
                   add: [
