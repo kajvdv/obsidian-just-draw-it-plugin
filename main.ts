@@ -191,6 +191,7 @@ class Toolbar {
   filePath: string
   color = "#dadada"
   layer: Konva.Layer
+  lastShapes: Array<Konva.Shape | Konva.Group> = []
 
   constructor(stage: Konva.Stage, app: App, filePath: string) {
     this.stage = stage 
@@ -204,6 +205,8 @@ class Toolbar {
     const brushTool = new Brush(this.stage, this.layer)
     const rectTool = new Rectangle(this.stage, this.layer)
     this.stage.on('mousedown touchstart', ev => {
+      if (['brush', 'rect'].includes(this.state))
+        this.lastShapes = []
       if (this.state === "brush") {
         brushTool.mouseDown(this.color)
       } else if (this.state === "rect") {
@@ -246,16 +249,19 @@ class Toolbar {
     new Notice(`Drawing saved as ${this.filePath}`);
   }
 
-  lastShape: any
   undo() {
     const lastShape = this.layer.children.pop()
-    console.log(lastShape)
-    this.lastShape = lastShape
+    if (!lastShape)
+      return
+    this.lastShapes.push(lastShape)
     this.layer.batchDraw()
   }
 
   redo() {
-    this.layer.children.push(this.lastShape)
+    const lastShape = this.lastShapes.pop()
+    if (!lastShape)
+      return
+    this.layer.children.push(lastShape)
     this.layer.batchDraw()
   }
   
@@ -298,14 +304,13 @@ function constructToolbar(stage: Konva.Stage, app: App, filePath: string) {
   undoBtn.className = 'toolbar-btn'
   setIcon(undoBtn, 'undo')
   undoBtn.addEventListener('click', ev => {
-    // new Notice(`Undo button not implemented`);
     toolbar.undo()
   })
 
   redoBtn.className = 'toolbar-btn'
   setIcon(redoBtn, 'redo')
   redoBtn.addEventListener('click', ev => {
-    new Notice(`Redo button not implemented`);
+    toolbar.redo()
   })
   
   brushBtn.className = 'toolbar-btn'
