@@ -88,22 +88,21 @@ function loadImageOnStage(stage: Konva.Stage, app: App, filePath: string) {
 class Brush {
   unloadTool: (() => void) | null = null
   stage: Konva.Stage
-  color: String
+  color: String = ""
   active = false
   isPaint = false
   lastLine: null | Konva.Line = null
-  constructor(stage: Konva.Stage, color: String) {
+  constructor(stage: Konva.Stage) {
     this.stage = stage 
-    this.color = color 
   }
   
-  mouseDown() {
+  mouseDown(color: string) {
     const layer = new Konva.Layer();
     this.isPaint = true;
     const pos = this.stage.getPointerPosition();
-    if (!pos) throw new Error("Could not get pointer position")
+    if (!pos) throw new Error("Could not get pointer position");
     this.lastLine = new Konva.Line({
-      stroke: "black",
+      stroke: color,
       strokeWidth: 5,
       globalCompositeOperation: 'source-over',
       // round cap for smoother lines
@@ -136,22 +135,22 @@ class Brush {
 class Rectangle {
   unloadTool: (() => void) | null = null
   stage: Konva.Stage
-  color: String
+  color: string = ""
   active = false
   isDown = false
   anchor: null | Konva.Vector2d = null
   lastLayer: null | Konva.Layer = null
-  constructor(stage: Konva.Stage, color: String) {
+  constructor(stage: Konva.Stage) {
     this.stage = stage 
-    this.color = color 
   }
   
-  mouseDown() {
+  mouseDown(color: string) {
     this.isDown = true
     const pos = this.stage.getPointerPosition();
     if (!pos)
       throw new Error("Could not get position")
     this.anchor = pos
+    this.color = color
   }
 
   mouseUp() {
@@ -174,8 +173,8 @@ class Rectangle {
       y: this.anchor.y,
       width: pos.x - this.anchor.x,
       height: pos.y - this.anchor.y,
-      stroke: 'black',
-      strokeWidth: 2
+      stroke: this.color,
+      strokeWidth: 2,
     })
     const layer = new Konva.Layer();
     this.lastLayer = layer
@@ -186,12 +185,13 @@ class Rectangle {
 
 
 class Toolbar {
-  selectedColor: string = "#dadada"
-  selectedTool: string = ''
+  selectedColor = "#dadada"
+  selectedTool = ''
+  state = ""
   stage: Konva.Stage
   app: App
   filePath: string
-  color: String = String("black")
+  color = "black"
 
   constructor(stage: Konva.Stage, app: App, filePath: string) {
     this.stage = stage 
@@ -200,31 +200,44 @@ class Toolbar {
   }
 
   loadEventHandlers() {
-    const brushTool = new Brush(this.stage, 'black')
-    const rectTool = new Rectangle(this.stage, 'black')
+    const brushTool = new Brush(this.stage)
+    const rectTool = new Rectangle(this.stage)
     this.stage.on('mousedown touchstart', ev => {
-      if (this.selectedTool === "brush") {
-        brushTool.mouseDown()
-      } else if (this.selectedTool === "rect") {
-        rectTool.mouseDown()
+      if (this.state === "brush") {
+        brushTool.mouseDown(this.color)
+      } else if (this.state === "rect") {
+        rectTool.mouseDown(this.color)
       }
     });
     
     this.stage.on('mouseup touchend', ev => {
-      if (this.selectedTool === "brush") {
+      if (this.state === "brush") {
         brushTool.mouseUp()
-      } else if (this.selectedTool === "rect") {
+      } else if (this.state === "rect") {
         rectTool.mouseUp()
       }
     });
 
     this.stage.on('mousemove touchmove', ev => {
-      if (this.selectedTool === "brush") {
+      if (this.state === "brush") {
         brushTool.mouseMove()
-      } else if (this.selectedTool === "rect") {
+      } else if (this.state === "rect") {
         rectTool.mouseMove()
       }
     });
+  }
+
+  setColor(color: string) {
+    this.color = color
+  }
+
+  setState(state: string = '') {
+    if (state === this.state) {
+      this.state = ""
+    } else {
+      this.state = state
+    }
+    return this.state
   }
 
   save() {    
@@ -242,21 +255,11 @@ class Toolbar {
   }
   
   brush() {
-    if (this.selectedTool === 'brush') {
-      this.selectedTool = ""
-    } else {
-      this.selectedTool = "brush"
-    }
-    return this.selectedTool
+    return this.setState('brush')
   }
 
   rectangle() {
-    if (this.selectedTool === 'rect') {
-      this.selectedTool = ""
-    } else {
-      this.selectedTool = "rect"
-    }
-    return this.selectedTool
+    return this.setState('rect')
   }
 
   showPalette = false
@@ -340,6 +343,7 @@ function constructToolbar(stage: Konva.Stage, app: App, filePath: string) {
     colorElement.className = "pick-color"
     colorElement.style.backgroundColor = color
     colorElement.addEventListener('click', ev => {
+      toolbar.setColor(color)
       colorBtn.style.color = color
     })
     picker.appendChild(colorElement)
@@ -356,6 +360,11 @@ function constructToolbar(stage: Konva.Stage, app: App, filePath: string) {
     } else {
       picker.remove()
     }
+  })
+
+  toolbarElement.addEventListener('click', ev => {
+    const state = toolbar.state
+    console.log("toolbar clicked", state)
   })
 
   toolbarElement.appendChild(saveBtn)
