@@ -92,12 +92,13 @@ class Brush {
   active = false
   isPaint = false
   lastLine: null | Konva.Line = null
-  constructor(stage: Konva.Stage) {
+  layer: Konva.Layer
+  constructor(stage: Konva.Stage, layer: Konva.Layer) {
     this.stage = stage 
+    this.layer = layer 
   }
   
   mouseDown(color: string) {
-    const layer = new Konva.Layer();
     this.isPaint = true;
     const pos = this.stage.getPointerPosition();
     if (!pos) throw new Error("Could not get pointer position");
@@ -111,12 +112,12 @@ class Brush {
       // add point twice, so we have some drawings even on a simple click
       points: [pos.x, pos.y, pos.x, pos.y],
     });
-    layer.add(this.lastLine);
-    this.stage.add(layer)
+    this.layer.add(this.lastLine);
   }
 
   mouseUp() {
     this.isPaint = false;
+    //TODO: clean up layer after use
   }
 
   mouseMove() {
@@ -139,9 +140,11 @@ class Rectangle {
   active = false
   isDown = false
   anchor: null | Konva.Vector2d = null
-  lastLayer: null | Konva.Layer = null
-  constructor(stage: Konva.Stage) {
+  layer: Konva.Layer
+  lastRect: null | Konva.Rect = null
+  constructor(stage: Konva.Stage, layer: Konva.Layer) {
     this.stage = stage 
+    this.layer = layer 
   }
   
   mouseDown(color: string) {
@@ -155,20 +158,20 @@ class Rectangle {
 
   mouseUp() {
     this.isDown = false
-    this.lastLayer = null
+    this.lastRect = null
   }
 
   mouseMove() {
     if (!this.isDown)
       return
-    if (this.lastLayer)
-      this.lastLayer.destroy();
+    if (this.lastRect)
+      this.lastRect.remove()
     const pos = this.stage.getPointerPosition();
     if (!pos)
       throw new Error("Could not get position")
     if (!this.anchor)
       throw new Error("No anchor position to draw the rectangle")
-    const rect = new Konva.Rect({
+    this.lastRect = new Konva.Rect({
       x: this.anchor.x,
       y: this.anchor.y,
       width: pos.x - this.anchor.x,
@@ -176,32 +179,30 @@ class Rectangle {
       stroke: this.color,
       strokeWidth: 2,
     })
-    const layer = new Konva.Layer();
-    this.lastLayer = layer
-    this.stage.add(layer)
-    layer.add(rect)
+    this.layer.add(this.lastRect)
   }
 }
 
 
 class Toolbar {
-  selectedColor = "#dadada"
-  selectedTool = ''
   state = ""
   stage: Konva.Stage
   app: App
   filePath: string
-  color = "black"
+  color = "#dadada"
+  layer: Konva.Layer
 
   constructor(stage: Konva.Stage, app: App, filePath: string) {
     this.stage = stage 
     this.app = app 
     this.filePath = filePath 
+    this.layer = new Konva.Layer()
+    this.stage.add(this.layer)
   }
 
   loadEventHandlers() {
-    const brushTool = new Brush(this.stage)
-    const rectTool = new Rectangle(this.stage)
+    const brushTool = new Brush(this.stage, this.layer)
+    const rectTool = new Rectangle(this.stage, this.layer)
     this.stage.on('mousedown touchstart', ev => {
       if (this.state === "brush") {
         brushTool.mouseDown(this.color)
@@ -243,15 +244,19 @@ class Toolbar {
   save() {    
     saveImage(this.stage, this.app, this.filePath)
     new Notice(`Drawing saved as ${this.filePath}`);
-    this.selectedTool = ""
   }
 
+  lastShape: any
   undo() {
-
+    const lastShape = this.layer.children.pop()
+    console.log(lastShape)
+    this.lastShape = lastShape
+    this.layer.batchDraw()
   }
 
   redo() {
-
+    this.layer.children.push(this.lastShape)
+    this.layer.batchDraw()
   }
   
   brush() {
@@ -270,12 +275,8 @@ class Toolbar {
 
 
 function constructToolbar(stage: Konva.Stage, app: App, filePath: string) {
-  let unloadTool: (() => void) | undefined = undefined
   const toolbarElement = document.createElement('div')
   toolbarElement.className = "canvas-toolbar"
-
-  let tool = ""
-  let color = '#dadada'
 
   const saveBtn  = document.createElement('button')
   const undoBtn  = document.createElement('button')
@@ -291,14 +292,14 @@ function constructToolbar(stage: Konva.Stage, app: App, filePath: string) {
   setIcon(saveBtn, 'save')
   saveBtn.addEventListener('click', ev => {
     toolbar.save()
-    brushBtn.className = 'toolbar-btn'
-    rectBtn.className = 'toolbar-btn'
+    toolbar.setState("")
   })
 
   undoBtn.className = 'toolbar-btn'
   setIcon(undoBtn, 'undo')
   undoBtn.addEventListener('click', ev => {
-    new Notice(`Undo button not implemented`);
+    // new Notice(`Undo button not implemented`);
+    toolbar.undo()
   })
 
   redoBtn.className = 'toolbar-btn'
@@ -310,23 +311,13 @@ function constructToolbar(stage: Konva.Stage, app: App, filePath: string) {
   brushBtn.className = 'toolbar-btn'
   setIcon(brushBtn, 'brush')
   brushBtn.addEventListener('click', ev => {
-    if (toolbar.brush()) {
-      brushBtn.classList.add("selected-btn")
-    } else {
-      brushBtn.className = "toolbar-btn"
-      rectBtn.className = "toolbar-btn"
-    }
+    toolbar.brush()
   })
 
   rectBtn.className = 'toolbar-btn'
   setIcon(rectBtn, 'square')
   rectBtn.addEventListener('click', ev => {
-    if (toolbar.rectangle()) {
-      rectBtn.classList.add("selected-btn")
-    } else {
-      brushBtn.className = "toolbar-btn"
-      rectBtn.className = "toolbar-btn"
-    }
+    toolbar.rectangle()
   })
 
   colorBtn.className = "toolbar-btn"
@@ -337,7 +328,7 @@ function constructToolbar(stage: Konva.Stage, app: App, filePath: string) {
   picker.style.top = '60px'
   picker.style.zIndex = '9999'
   picker.style.borderRadius = '5px'
-  const colors = ['var(--text-normal)', 'black', '#df4b26', 'blue', 'yellow']
+  const colors = ['#dadada', 'black', '#df4b26', 'blue', 'yellow']
   for (let color of colors) {
     const colorElement = document.createElement('div')
     colorElement.className = "pick-color"
@@ -350,10 +341,9 @@ function constructToolbar(stage: Konva.Stage, app: App, filePath: string) {
   }
 
 
-  let showPicker = true
+  let showPicker = false
   setIcon(colorBtn, 'palette')
   colorBtn.addEventListener('click', ev => {
-    // new Notice(`Undo button not implemented`);
     showPicker = !showPicker
     if (showPicker) {
       colorBtn.appendChild(picker)
@@ -364,7 +354,16 @@ function constructToolbar(stage: Konva.Stage, app: App, filePath: string) {
 
   toolbarElement.addEventListener('click', ev => {
     const state = toolbar.state
-    console.log("toolbar clicked", state)
+    if (state === "brush") {
+      brushBtn.className = "toolbar-btn selected-btn"
+      rectBtn.className = "toolbar-btn"
+    } else if (state === "rect") {
+      brushBtn.className = "toolbar-btn"
+      rectBtn.className = "toolbar-btn selected-btn"
+    } else {
+      brushBtn.className = "toolbar-btn"
+      rectBtn.className = "toolbar-btn"
+    }
   })
 
   toolbarElement.appendChild(saveBtn)
@@ -373,7 +372,6 @@ function constructToolbar(stage: Konva.Stage, app: App, filePath: string) {
   toolbarElement.appendChild(brushBtn)
   toolbarElement.appendChild(rectBtn)
   toolbarElement.appendChild(colorBtn)
-  colorBtn.appendChild(picker) // Remove when done with development
 
   return toolbarElement
 }
@@ -400,11 +398,11 @@ class CanvasWidget extends WidgetType {
       height: CANVAS_WIDTH / 1.4142,
     });
     const stage = this.stage
+    loadImageOnStage(stage, this.app, this.filePath)
     const toolbar = constructToolbar(stage, this.app, this.filePath)
     this.container.appendChild(toolbar)
     this.container.appendChild(konvaContainer)
   
-    loadImageOnStage(stage, this.app, this.filePath)
   }
 
   toDOM(view: EditorView) {
@@ -448,7 +446,7 @@ export default class ExamplePlugin extends Plugin {
         syntaxTree(tr.state).iterate({
           enter(node) {
             if (node.type.name == "hmd-internal-link"
-              && tr.state.doc.sliceString(node.from-3, node.from-2) == "?"
+              && tr.state.doc.sliceString(node.from-3, node.from-2) == "?" //TODO: make question mark purple, just like (!) in Obsidian
             ) {
               linkNodes.push(node.node)
               const filePath = tr.state.doc.sliceString(node.from, node.to)
