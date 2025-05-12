@@ -1,8 +1,25 @@
 .toolbar-btn {
-    width: 100%;
+    width: min-content;
     border-radius: 0;
 }
 
 .selected-btn {
     background-color: rgb(133, 133, 133) !important;
+}
+
+.canvas-container {
+    /* display: flex;
+    flex-direction: row; */
+}
+
+.canvas-toolbar {
+    display: flex
+}
+
+.pick-color {
+    position: relative;
+    width: 36px;
+    height: 36px;
+    margin: 5px;
+    border-radius: 5px;
 }

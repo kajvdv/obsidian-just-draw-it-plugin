@@ -85,18 +85,25 @@ function loadImageOnStage(stage: Konva.Stage, app: App, filePath: string) {
 }
 
 
-function getFreeDrawHandlers(stage: Konva.Stage) {
-  const layer = new Konva.Layer();
-  stage.add(layer);
-  let isPaint = false;
-  let lastLine: Konva.Line;
-
-  function mouseDownHandler() {
-    isPaint = true;
-    const pos = stage.getPointerPosition();
+class Brush {
+  unloadTool: (() => void) | null = null
+  stage: Konva.Stage
+  color: String
+  active = false
+  isPaint = false
+  lastLine: null | Konva.Line = null
+  constructor(stage: Konva.Stage, color: String) {
+    this.stage = stage 
+    this.color = color 
+  }
+  
+  mouseDown() {
+    const layer = new Konva.Layer();
+    this.isPaint = true;
+    const pos = this.stage.getPointerPosition();
     if (!pos) throw new Error("Could not get pointer position")
-    lastLine = new Konva.Line({
-      stroke: '#df4b26',
+    this.lastLine = new Konva.Line({
+      stroke: "black",
       strokeWidth: 5,
       globalCompositeOperation: 'source-over',
       // round cap for smoother lines
@@ -105,115 +112,261 @@ function getFreeDrawHandlers(stage: Konva.Stage) {
       // add point twice, so we have some drawings even on a simple click
       points: [pos.x, pos.y, pos.x, pos.y],
     });
-    layer.add(lastLine);
+    layer.add(this.lastLine);
+    this.stage.add(layer)
   }
 
-  function mouseUpHandler() {
-    isPaint = false
+  mouseUp() {
+    this.isPaint = false;
   }
 
-  function mouseMoveHandler() {
-    if (!isPaint) {
+  mouseMove() {
+    if (!this.isPaint) {
       return;
     }
-    const pos = stage.getPointerPosition();
-    if (!pos)
+    const pos = this.stage.getPointerPosition();
+    if (!pos || !this.lastLine)
       throw new Error("Could not get pointer position")
-    const newPoints = lastLine.points().concat([pos.x, pos.y]);
-    lastLine.points(newPoints);
+    const newPoints = this.lastLine.points().concat([pos.x, pos.y]);
+    this.lastLine.points(newPoints);
   }
-
-  return {
-    mouseDownHandler,
-    mouseUpHandler,
-    mouseMoveHandler
-  }
+  
 }
 
-
-function initFreeDrawing(stage: Konva.Stage) {
-  const handlers = getFreeDrawHandlers(stage)
-
-  stage.on('mousedown touchstart', handlers.mouseDownHandler);
-  stage.on('mouseup touchend', handlers.mouseUpHandler);
-  const f: Konva.KonvaEventListener<typeof stage, any> = (e) => {
-    e.evt.preventDefault();
-    handlers.mouseMoveHandler()
+class Rectangle {
+  unloadTool: (() => void) | null = null
+  stage: Konva.Stage
+  color: String
+  active = false
+  isDown = false
+  anchor: null | Konva.Vector2d = null
+  lastLayer: null | Konva.Layer = null
+  constructor(stage: Konva.Stage, color: String) {
+    this.stage = stage 
+    this.color = color 
   }
-  stage.on('mousemove touchmove', f);
-  return function cleanupHandlers() {
-    stage.off('mousedown touchstart', handlers.mouseDownHandler)
-    stage.off('mouseup touchend', handlers.mouseUpHandler);
-    stage.off('mousemove touchmove', f)
-  }
-}
-
-
-function getRectDrawHandlers(stage: Konva.Stage) {
-  const layer = new Konva.Layer()
-  stage.add(layer)
   
-  let isDown = false
-  let anchor: Konva.Vector2d
-  let lastRect: Konva.Rect | null
-  
-  function mouseDownHandler() {
-    isDown = true
-    const pos = stage.getPointerPosition();
+  mouseDown() {
+    this.isDown = true
+    const pos = this.stage.getPointerPosition();
     if (!pos)
       throw new Error("Could not get position")
-    anchor = pos
+    this.anchor = pos
   }
 
-  function mouseUpHandler() {
-    isDown = false
-    lastRect = null
+  mouseUp() {
+    this.isDown = false
+    this.lastLayer = null
   }
 
-  function mouseMoveHandler() {
-    if (!isDown)
+  mouseMove() {
+    if (!this.isDown)
       return
-    if (lastRect)
-      lastRect.destroy();
-    const pos = stage.getPointerPosition();
+    if (this.lastLayer)
+      this.lastLayer.destroy();
+    const pos = this.stage.getPointerPosition();
     if (!pos)
       throw new Error("Could not get position")
+    if (!this.anchor)
+      throw new Error("No anchor position to draw the rectangle")
     const rect = new Konva.Rect({
-      x: anchor.x,
-      y: anchor.y,
-      width: pos.x - anchor.x,
-      height: pos.y - anchor.y,
-      stroke: 'white',
+      x: this.anchor.x,
+      y: this.anchor.y,
+      width: pos.x - this.anchor.x,
+      height: pos.y - this.anchor.y,
+      stroke: 'black',
       strokeWidth: 2
     })
-    lastRect = rect
+    const layer = new Konva.Layer();
+    this.lastLayer = layer
+    this.stage.add(layer)
     layer.add(rect)
-  }
-
-  return {
-    mouseDownHandler,
-    mouseUpHandler,
-    mouseMoveHandler
   }
 }
 
 
-function initRectDrawing(stage: Konva.Stage) {
-  const handlers = getRectDrawHandlers(stage)
+class Toolbar {
+  selectedColor: string = "#dadada"
+  selectedTool: string = ''
+  stage: Konva.Stage
+  app: App
+  filePath: string
+  color: String = String("black")
 
-  stage.on('mousedown touchstart', handlers.mouseDownHandler);
-  stage.on('mouseup touchend', handlers.mouseUpHandler);
-  const f: Konva.KonvaEventListener<typeof stage, any> = (e) => {
-    e.evt.preventDefault();
-    handlers.mouseMoveHandler()
+  constructor(stage: Konva.Stage, app: App, filePath: string) {
+    this.stage = stage 
+    this.app = app 
+    this.filePath = filePath 
   }
-  stage.on('mousemove touchmove', f);
-  return function cleanupHandlers() {
-    // TODO: Remove layers after added to the stage
-    stage.off('mousedown touchstart', handlers.mouseDownHandler)
-    stage.off('mouseup touchend', handlers.mouseUpHandler);
-    stage.off('mousemove touchmove', f)
+
+  loadEventHandlers() {
+    const brushTool = new Brush(this.stage, 'black')
+    const rectTool = new Rectangle(this.stage, 'black')
+    this.stage.on('mousedown touchstart', ev => {
+      if (this.selectedTool === "brush") {
+        brushTool.mouseDown()
+      } else if (this.selectedTool === "rect") {
+        rectTool.mouseDown()
+      }
+    });
+    
+    this.stage.on('mouseup touchend', ev => {
+      if (this.selectedTool === "brush") {
+        brushTool.mouseUp()
+      } else if (this.selectedTool === "rect") {
+        rectTool.mouseUp()
+      }
+    });
+
+    this.stage.on('mousemove touchmove', ev => {
+      if (this.selectedTool === "brush") {
+        brushTool.mouseMove()
+      } else if (this.selectedTool === "rect") {
+        rectTool.mouseMove()
+      }
+    });
   }
+
+  save() {    
+    saveImage(this.stage, this.app, this.filePath)
+    new Notice(`Drawing saved as ${this.filePath}`);
+    this.selectedTool = ""
+  }
+
+  undo() {
+
+  }
+
+  redo() {
+
+  }
+  
+  brush() {
+    if (this.selectedTool === 'brush') {
+      this.selectedTool = ""
+    } else {
+      this.selectedTool = "brush"
+    }
+    return this.selectedTool
+  }
+
+  rectangle() {
+    if (this.selectedTool === 'rect') {
+      this.selectedTool = ""
+    } else {
+      this.selectedTool = "rect"
+    }
+    return this.selectedTool
+  }
+
+  showPalette = false
+  palette() {
+    this.showPalette = !this.showPalette
+  }
+}
+
+
+function constructToolbar(stage: Konva.Stage, app: App, filePath: string) {
+  let unloadTool: (() => void) | undefined = undefined
+  const toolbarElement = document.createElement('div')
+  toolbarElement.className = "canvas-toolbar"
+
+  let tool = ""
+  let color = '#dadada'
+
+  const saveBtn  = document.createElement('button')
+  const undoBtn  = document.createElement('button')
+  const redoBtn  = document.createElement('button')
+  const brushBtn = document.createElement('button')
+  const rectBtn  = document.createElement('button')
+  const colorBtn = document.createElement('button')
+
+  const toolbar = new Toolbar(stage, app, filePath)
+  toolbar.loadEventHandlers()
+  
+  saveBtn.className = 'toolbar-btn'
+  setIcon(saveBtn, 'save')
+  saveBtn.addEventListener('click', ev => {
+    toolbar.save()
+    brushBtn.className = 'toolbar-btn'
+    rectBtn.className = 'toolbar-btn'
+  })
+
+  undoBtn.className = 'toolbar-btn'
+  setIcon(undoBtn, 'undo')
+  undoBtn.addEventListener('click', ev => {
+    new Notice(`Undo button not implemented`);
+  })
+
+  redoBtn.className = 'toolbar-btn'
+  setIcon(redoBtn, 'redo')
+  redoBtn.addEventListener('click', ev => {
+    new Notice(`Redo button not implemented`);
+  })
+  
+  brushBtn.className = 'toolbar-btn'
+  setIcon(brushBtn, 'brush')
+  brushBtn.addEventListener('click', ev => {
+    if (toolbar.brush()) {
+      brushBtn.classList.add("selected-btn")
+    } else {
+      brushBtn.className = "toolbar-btn"
+      rectBtn.className = "toolbar-btn"
+    }
+  })
+
+  rectBtn.className = 'toolbar-btn'
+  setIcon(rectBtn, 'square')
+  rectBtn.addEventListener('click', ev => {
+    if (toolbar.rectangle()) {
+      rectBtn.classList.add("selected-btn")
+    } else {
+      brushBtn.className = "toolbar-btn"
+      rectBtn.className = "toolbar-btn"
+    }
+  })
+
+  colorBtn.className = "toolbar-btn"
+  const picker = document.createElement('div')
+  picker.style.position = 'absolute'
+  picker.style.display = 'flex'
+  picker.style.backgroundColor = 'grey'
+  picker.style.top = '60px'
+  picker.style.zIndex = '9999'
+  picker.style.borderRadius = '5px'
+  const colors = ['var(--text-normal)', 'black', '#df4b26', 'blue', 'yellow']
+  for (let color of colors) {
+    const colorElement = document.createElement('div')
+    colorElement.className = "pick-color"
+    colorElement.style.backgroundColor = color
+    colorElement.addEventListener('click', ev => {
+      colorBtn.style.color = color
+    })
+    picker.appendChild(colorElement)
+  }
+
+
+  let showPicker = true
+  setIcon(colorBtn, 'palette')
+  colorBtn.addEventListener('click', ev => {
+    // new Notice(`Undo button not implemented`);
+    showPicker = !showPicker
+    if (showPicker) {
+      colorBtn.appendChild(picker)
+    } else {
+      picker.remove()
+    }
+  })
+
+  toolbarElement.appendChild(saveBtn)
+  toolbarElement.appendChild(undoBtn)
+  toolbarElement.appendChild(redoBtn)
+  toolbarElement.appendChild(brushBtn)
+  toolbarElement.appendChild(rectBtn)
+  toolbarElement.appendChild(colorBtn)
+  colorBtn.appendChild(picker) // Remove when done with development
+
+  return toolbarElement
 }
 
 
@@ -229,77 +382,20 @@ class CanvasWidget extends WidgetType {
     this.filePath = filePath
     this.app = app
     this.container = document.createElement("div")
-    this.container.style.display = 'flex'
+    // this.container.style.display = 'flex'
+    this.container.className = "canvas-container"
     const konvaContainer = document.createElement('div')
     this.stage = new Konva.Stage({
       container: konvaContainer,
       width: CANVAS_WIDTH,
       height: CANVAS_WIDTH / 1.4142,
     });
-    this.container.appendChild(konvaContainer)
     const stage = this.stage
+    const toolbar = constructToolbar(stage, this.app, this.filePath)
+    this.container.appendChild(toolbar)
+    this.container.appendChild(konvaContainer)
   
     loadImageOnStage(stage, this.app, this.filePath)
-    let unloadTool: (() => void) | undefined = undefined
-    const toolbar = document.createElement('div')
-    toolbar.style.position = 'relative'
-
-    let tool = ""
-
-    const saveBtn = document.createElement('button')
-    saveBtn.className = 'toolbar-btn'
-    setIcon(saveBtn, 'save')
-    saveBtn.addEventListener('click', ev => {
-      saveImage(stage, app, filePath)
-      new Notice(`Drawing saved as ${filePath}`);
-      if (unloadTool)
-        unloadTool();
-      tool = ""
-      brushBtn.className = 'toolbar-btn'
-      rectBtn.className = 'toolbar-btn'
-    })
-    const brushBtn = document.createElement('button')
-    brushBtn.className = 'toolbar-btn'
-    setIcon(brushBtn, 'brush')
-    brushBtn.addEventListener('click', ev => {
-      if (unloadTool)
-        unloadTool();
-      if (tool != "brush") {
-        unloadTool = initFreeDrawing(stage)
-        tool = 'brush'
-        brushBtn.classList.add('selected-btn')
-        rectBtn.className = 'toolbar-btn'
-      } else {
-        tool = ""
-        brushBtn.className = 'toolbar-btn'
-        unloadTool = undefined
-      }
-    })
-
-    const rectBtn = document.createElement('button')
-    rectBtn.className = 'toolbar-btn'
-    setIcon(rectBtn, 'square')
-
-    
-    toolbar.appendChild(saveBtn)
-    toolbar.appendChild(brushBtn)
-    toolbar.appendChild(rectBtn)
-    rectBtn.addEventListener('click', ev => {
-      if (unloadTool)
-        unloadTool();
-      if (tool != "rect") {
-        unloadTool = initRectDrawing(stage)
-        tool = 'rect'
-        rectBtn.classList.add('selected-btn')
-        brushBtn.className = 'toolbar-btn' 
-      } else {
-        tool = ""
-        rectBtn.className = 'toolbar-btn'
-        unloadTool = undefined
-      }
-    })
-    
-    this.container.appendChild(toolbar)
   }
 
   toDOM(view: EditorView) {
