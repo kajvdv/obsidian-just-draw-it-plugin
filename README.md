@@ -11,7 +11,7 @@ Or just create a new drawing using `?[[filename.png]]`.
 - Drawings are directly saved in your vault as a png file. You can always change the (?) back to a (!) when your done with drawing.
 
 ## Usage
-![demo](https://github.com/kajvdv/obsidian-just-draw-it-plugin/output.gif)
+![demo](https://github.com/kajvdv/obsidian-just-draw-it-plugin/blob/main/output.gif)
 - Copy an image into your note.
 - Change the (!) on the beginning of the tag to a (?)
 - Just draw it!
