@@ -4,6 +4,7 @@
   "main": "index.js",
   "scripts": {
     "dev": "node esbuild.config.mjs",
+    "build": "node esbuild.config.mjs production",
     "test": "echo \"Error: no test specified\" && exit 1",
     "watch": "tsc -w"
   },
