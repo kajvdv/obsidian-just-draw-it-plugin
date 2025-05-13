@@ -413,6 +413,10 @@ class CanvasWidget extends WidgetType {
     return this.container
   }
 
+  get estimatedHeight() {
+    return this.stage.height();
+  }
+
   destroy() {
     this.container.removeEventListener('mousedown', this.cursorEventHandler)
   }
@@ -447,7 +451,6 @@ export default class ExamplePlugin extends Plugin {
               linkNodes.push(node.node)
               const filePath = tr.state.doc.sliceString(node.from, node.to)
               const decoration = findDecorationByFrom(canvasDecs, node.to + tagOffset)
-              // TODO: Fix behaviour on pressing enter after tag
               const line = tr.state.doc.lineAt(node.to)
               if (!decoration) {
                 canvasDecs = canvasDecs.update({
@@ -495,17 +498,12 @@ export default class ExamplePlugin extends Plugin {
               && tr.state.doc.sliceString(node.from-3, node.from-2) == "?"
             ) {
               if (!(node.from-3 <= cursor && cursor <= node.to+2)) {
-                const charBefore = tr.state.doc.sliceString(node.from-3, node.from-3)
-                const config = {
-                  block: true,
-                  includes: true,
-                  side: -1
+                const charBefore = tr.state.doc.sliceString(node.from-4, node.from-3)
+                if (charBefore == '\n') {
+                  decos.push(Decoration.replace({}).range(node.from-4, node.to+2))
+                } else {
+                  decos.push(Decoration.replace({}).range(node.from-3, node.to+2))
                 }
-                decos.push(Decoration.replace(config).range(node.from-3, node.to+2))
-                // if (charBefore == '\n') {
-                // } else {
-                //   decos.push(Decoration.replace(config).range(node.from-3, node.to+2))
-                // }
               }
             }
           }
@@ -519,7 +517,7 @@ export default class ExamplePlugin extends Plugin {
     
     this.registerEditorExtension([
       canvasField,
-      hideTag
+      // hideTag
     ]);
     
     this.registerMarkdownPostProcessor((element, context) => {
