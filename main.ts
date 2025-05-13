@@ -86,10 +86,8 @@ function loadImageOnStage(stage: Konva.Stage, app: App, filePath: string) {
 
 
 class Brush {
-  unloadTool: (() => void) | null = null
   stage: Konva.Stage
   color: String = ""
-  active = false
   isPaint = false
   lastLine: null | Konva.Line = null
   layer: Konva.Layer
@@ -117,7 +115,6 @@ class Brush {
 
   mouseUp() {
     this.isPaint = false;
-    //TODO: clean up layer after use
   }
 
   mouseMove() {
@@ -134,10 +131,8 @@ class Brush {
 }
 
 class Rectangle {
-  unloadTool: (() => void) | null = null
   stage: Konva.Stage
   color: string = ""
-  active = false
   isDown = false
   anchor: null | Konva.Vector2d = null
   layer: Konva.Layer
@@ -327,12 +322,7 @@ function constructToolbar(stage: Konva.Stage, app: App, filePath: string) {
 
   colorBtn.className = "toolbar-btn"
   const picker = document.createElement('div')
-  picker.style.position = 'absolute'
-  picker.style.display = 'flex'
-  picker.style.backgroundColor = 'grey'
-  picker.style.top = '60px'
-  picker.style.zIndex = '9999'
-  picker.style.borderRadius = '5px'
+  picker.className = "color-picker"
   const colors = ['#dadada', 'black', '#df4b26', 'blue', 'yellow']
   for (let color of colors) {
     const colorElement = document.createElement('div')
@@ -407,6 +397,7 @@ class CanvasWidget extends WidgetType {
     const toolbar = constructToolbar(stage, this.app, this.filePath)
     this.container.appendChild(toolbar)
     this.container.appendChild(konvaContainer)
+    this.container.style.display = "inline"
   
   }
 
@@ -463,7 +454,8 @@ export default class ExamplePlugin extends Plugin {
                   add: [
                     Decoration.widget({
                       widget: new CanvasWidget(filePath, app),
-                      side: 1
+                      side: 1,
+                      block: true
                     }).range(node.to+tagOffset, node.to+tagOffset),
                   ]
                 })
@@ -503,12 +495,17 @@ export default class ExamplePlugin extends Plugin {
               && tr.state.doc.sliceString(node.from-3, node.from-2) == "?"
             ) {
               if (!(node.from-3 <= cursor && cursor <= node.to+2)) {
-                const charBefore = tr.state.doc.sliceString(node.from-4, node.from-3)
-                if (charBefore == '\n') {
-                  decos.push(Decoration.replace({}).range(node.from-4, node.to+2))
-                } else {
-                  decos.push(Decoration.replace({}).range(node.from-3, node.to+2))
+                const charBefore = tr.state.doc.sliceString(node.from-3, node.from-3)
+                const config = {
+                  block: true,
+                  includes: true,
+                  side: -1
                 }
+                decos.push(Decoration.replace(config).range(node.from-3, node.to+2))
+                // if (charBefore == '\n') {
+                // } else {
+                //   decos.push(Decoration.replace(config).range(node.from-3, node.to+2))
+                // }
               }
             }
           }

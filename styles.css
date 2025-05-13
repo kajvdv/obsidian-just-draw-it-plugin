@@ -1,6 +1,7 @@
 .toolbar-btn {
     width: min-content;
     border-radius: 0;
+    position: relative;
 }
 
 .selected-btn {
@@ -14,6 +15,15 @@
 
 .canvas-toolbar {
     display: flex
+}
+
+.color-picker {
+    position: absolute;
+    display: flex;
+    background-color: grey; /*TODO: Better color*/
+    top: 42px;
+    z-index: 9999;
+    border-radius: 5px;
 }
 
 .pick-color {

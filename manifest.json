@@ -1,10 +1,10 @@
 {
-	"id": "draw-stuff",
-	"name": "Draw Stuff",
+	"id": "just-draw-it",
+	"name": "Just Draw It",
 	"version": "0.1.0",
 	"minAppVersion": "1.8.10",
-	"description": "Just draw some stuff u know.",
+	"description": "Draw on your embedded images.",
 	"author": "Kaj van der Valk",
 	"authorUrl": "https://github.com/kajvdv",
-	"isDesktopOnly": false
+	"isDesktopOnly": true
 }
